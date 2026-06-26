@@ -56,6 +56,8 @@ function App() {
   const [status, setStatus] = useState({ isConfigured: false, isConnected: false, mode: 'mock' });
   const [preferences, setPreferences] = useState({
     origin: '',
+    homeAddress: '',
+    workAddress: '',
     transportMode: 'driving',
     prepTimeMinutes: 60,
     leadTimeMinutes: 15,
@@ -794,6 +796,28 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label>Endereço de Casa</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Ex: Av. Paulista, 1000 - Bela Vista, São Paulo"
+                  value={preferences.homeAddress || ''} 
+                  onChange={e => setPreferences({...preferences, homeAddress: e.target.value})}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Endereço de Trabalho</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Ex: Av. Brigadeiro Faria Lima, 3477 - Itaim Bibi, São Paulo"
+                  value={preferences.workAddress || ''} 
+                  onChange={e => setPreferences({...preferences, workAddress: e.target.value})}
+                />
+              </div>
+
+              <div className="form-group">
                 <label>Tempo de Preparação (minutos)</label>
                 <input 
                   type="number" 
@@ -973,6 +997,20 @@ function App() {
                 <div>
                   <span style={{ color: 'var(--text-secondary)' }}>Transporte: </span>
                   <strong>{preferences.transportMode === 'driving' ? 'Carro' : preferences.transportMode === 'transit' ? 'Trânsito Público' : preferences.transportMode === 'bicycling' ? 'Bicicleta' : 'A pé'}</strong>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <MapPin size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Casa: </span>
+                  <strong title={preferences.homeAddress}>{preferences.homeAddress ? (preferences.homeAddress.length > 25 ? preferences.homeAddress.substring(0, 25) + '...' : preferences.homeAddress) : 'Não configurado'}</strong>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <MapPin size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Trabalho: </span>
+                  <strong title={preferences.workAddress}>{preferences.workAddress ? (preferences.workAddress.length > 25 ? preferences.workAddress.substring(0, 25) + '...' : preferences.workAddress) : 'Não configurado'}</strong>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
