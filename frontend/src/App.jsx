@@ -230,24 +230,37 @@ function App() {
     }
   }, []);
 
-  const toggleListening = () => {
+  const startListening = (e) => {
+    e.preventDefault();
     if (!recognitionRef.current) {
       alert('Seu navegador não suporta reconhecimento de voz (Speech-to-Text). Use o Google Chrome ou Microsoft Edge.');
       return;
     }
 
-    if (isListening) {
-      recognitionRef.current.stop();
-    } else {
-      if (audioElement) {
-        try {
-          audioElement.pause();
-        } catch (e) {}
-      }
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+    if (audioElement) {
+      try {
+        audioElement.pause();
+      } catch (err) {}
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    try {
       recognitionRef.current.start();
+    } catch (err) {
+      console.warn('[STT] Speech recognition already running or starting:', err.message);
+    }
+  };
+
+  const stopListening = (e) => {
+    e?.preventDefault();
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (err) {
+        console.warn('[STT] Error stopping speech recognition:', err.message);
+      }
     }
   };
 
@@ -1134,28 +1147,38 @@ function App() {
 
         {/* Message Input field */}
         <div className="chat-input-area">
-          <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }}>
-            <div className="chat-input-wrapper">
-              <button
-                type="button"
-                className={`btn-mic ${isListening ? 'listening' : ''}`}
-                onClick={toggleListening}
-                title={isListening ? 'Ouvindo... Clique para parar' : 'Falar por voz'}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: isListening ? '#ef4444' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  padding: '4px 8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: '4px',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <Mic size={18} className={isListening ? 'pulse-mic' : ''} />
-              </button>
+          <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%' }}>
+            <button
+              type="button"
+              className={`btn-mic-outer ${isListening ? 'listening' : ''}`}
+              onPointerDown={startListening}
+              onPointerUp={stopListening}
+              onPointerLeave={stopListening}
+              onPointerCancel={stopListening}
+              title="Pressione e segure para falar"
+              style={{
+                width: '46px',
+                height: '46px',
+                minWidth: '46px',
+                borderRadius: '50%',
+                background: isListening ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                border: isListening ? '1px solid #ef4444' : '1px solid var(--border-color)',
+                color: isListening ? '#ef4444' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                touchAction: 'none',
+                boxShadow: isListening ? '0 0 15px rgba(239, 68, 68, 0.3)' : 'none'
+              }}
+            >
+              <Mic size={22} className={isListening ? 'pulse-mic' : ''} />
+            </button>
+
+            <div className="chat-input-wrapper" style={{ flex: 1 }}>
               <input 
                 type="text" 
                 className="chat-input"
