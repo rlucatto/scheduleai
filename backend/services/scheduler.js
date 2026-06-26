@@ -1,0 +1,171 @@
+import { listEvents, getAuthStatus } from './calendar.js';
+import { getTravelTime } from './travel.js';
+
+let ioInstance = null;
+let schedulerInterval = null;
+
+// User settings (mutable via API)
+let userPreferences = {
+  origin: 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP',
+  homeAddress: 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP',
+  workAddress: 'Avenida Brigadeiro Faria Lima, 3477 - Itaim Bibi, São Paulo - SP',
+  transportMode: 'driving',
+  prepTimeMinutes: 60, // time before departure to get ready
+  leadTimeMinutes: 15,  // time before departure to warn
+  advanceArrivalMinutes: 15, // arrive 15 minutes early by default
+  modelPriority: ['gemini-2.5-flash', 'gemini-2.0-flash'] // priority list of models
+};
+
+// Store fired notifications to prevent duplicates
+// format: { "event-id-prep": true, "event-id-leave": true }
+const firedNotifications = new Set();
+
+export const setPreferences = (newPrefs) => {
+  userPreferences = { ...userPreferences, ...newPrefs };
+  if (ioInstance) {
+    ioInstance.emit('auth_change', {
+      status: getAuthStatus(),
+      preferences: userPreferences
+    });
+  }
+  return userPreferences;
+};
+
+export const getPreferences = () => userPreferences;
+
+// Calculate all details for a single event:
+// - travelDuration (seconds)
+// - departureTime (Date)
+// - getReadyTime (Date)
+// - warnLeaveTime (Date)
+export const calculateEventTriggers = async (event, origin, mode) => {
+  const startStr = event.start?.dateTime || event.start?.date;
+  if (!startStr) return null;
+
+  const eventStart = new Date(startStr);
+  const location = event.location || '';
+
+  // Get travel time
+  const travelData = await getTravelTime(
+    origin || userPreferences.origin,
+    location,
+    mode || userPreferences.transportMode
+  );
+
+  const travelSeconds = travelData.durationSeconds || 0;
+  
+  // departureTime = Event Start - Travel Time - Advance Arrival Time
+  const departureTime = new Date(eventStart.getTime() - (travelSeconds * 1000) - (userPreferences.advanceArrivalMinutes * 60 * 1000));
+  
+  // getReadyTime = Departure Time - prep time
+  const getReadyTime = new Date(departureTime.getTime() - (userPreferences.prepTimeMinutes * 60 * 1000));
+  
+  // warnLeaveTime = Departure Time - lead time
+  const warnLeaveTime = new Date(departureTime.getTime() - (userPreferences.leadTimeMinutes * 60 * 1000));
+
+  return {
+    eventId: event.id,
+    summary: event.summary,
+    location,
+    eventStart,
+    travelData,
+    departureTime,
+    getReadyTime,
+    warnLeaveTime
+  };
+};
+
+// Process events and push notifications if thresholds are met
+const checkUpcomingEvents = async () => {
+  try {
+    const now = new Date();
+    // Check events starting in the next 12 hours
+    const timeMin = now.toISOString();
+    const timeMax = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
+
+    const events = await listEvents(timeMin, timeMax);
+    if (!events || events.length === 0) return;
+
+    for (const event of events) {
+      const triggers = await calculateEventTriggers(event);
+      if (!triggers) continue;
+
+      const { eventId, summary, getReadyTime, warnLeaveTime, departureTime, travelData } = triggers;
+
+      // 1. Get Ready Reminder (1 hour before departure)
+      const prepKey = `${eventId}-prep`;
+      if (now >= getReadyTime && now < warnLeaveTime && !firedNotifications.has(prepKey)) {
+        firedNotifications.add(prepKey);
+        sendNotification('get-ready', {
+          eventId,
+          summary,
+          message: `Hora de se arrumar! Seu compromisso "${summary}" é às ${triggers.eventStart.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}. Você precisará sair às ${departureTime.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})} (trânsito estimado: ${travelData.durationText}).`,
+          eventTime: triggers.eventStart,
+          departureTime
+        });
+      }
+
+      // 2. Leave Warning Reminder (15 mins before departure)
+      const leaveKey = `${eventId}-leave`;
+      if (now >= warnLeaveTime && now < departureTime && !firedNotifications.has(leaveKey)) {
+        firedNotifications.add(leaveKey);
+        sendNotification('leave-warning', {
+          eventId,
+          summary,
+          message: `Atenção: Hora de se preparar para sair em 15 minutos! O trânsito até "${triggers.location || 'o local'}" é de ${travelData.durationText}.`,
+          eventTime: triggers.eventStart,
+          departureTime
+        });
+      }
+      
+      // Optional: exact departure reminder (just in case they missed the warning)
+      const departKey = `${eventId}-depart`;
+      if (now >= departureTime && now < new Date(departureTime.getTime() + 2 * 60 * 1000) && !firedNotifications.has(departKey)) {
+        firedNotifications.add(departKey);
+        sendNotification('depart-now', {
+          eventId,
+          summary,
+          message: `Hora de Sair! Siga para "${summary}". Boa viagem!`,
+          eventTime: triggers.eventStart,
+          departureTime
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error checking scheduler triggers:', error);
+  }
+};
+
+const sendNotification = (type, data) => {
+  console.log(`[SCHEDULER NOTIFICATION] [${type.toUpperCase()}] ${data.message}`);
+  if (ioInstance) {
+    ioInstance.emit('notification', {
+      id: `notification-${Date.now()}`,
+      type,
+      title: type === 'get-ready' ? 'Hora de se arrumar! 🧥' : type === 'leave-warning' ? 'Prepare-se para sair! 🚗' : 'Hora de Partir! 🚀',
+      message: data.message,
+      data,
+      timestamp: new Date().toISOString()
+    });
+  }
+};
+
+export const startScheduler = (io) => {
+  ioInstance = io;
+  if (schedulerInterval) clearInterval(schedulerInterval);
+  
+  // Check triggers every 15 seconds to ensure alerts are responsive
+  schedulerInterval = setInterval(checkUpcomingEvents, 15000);
+  console.log('Scheduler Service Started (checking triggers every 15s)');
+  
+  // Run an initial check immediately
+  checkUpcomingEvents();
+};
+
+export const stopScheduler = () => {
+  if (schedulerInterval) {
+    clearInterval(schedulerInterval);
+    schedulerInterval = null;
+    console.log('Scheduler Service Stopped');
+  }
+};
