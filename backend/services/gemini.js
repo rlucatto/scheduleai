@@ -1270,14 +1270,14 @@ const addWavHeader = (pcmBuffer, sampleRate = 24000) => {
   return Buffer.concat([header, pcmBuffer]);
 };
 
-export const synthesizeSpeech = async (text) => {
+export const synthesizeSpeech = async (text, voice) => {
   const genAIInstance = getGenAIClient();
   if (!genAIInstance) {
     throw new Error('Nenhuma chave Gemini disponível ou configurada.');
   }
 
   const prefs = getPreferences();
-  const voiceName = prefs.ttsVoice || 'Puck';
+  const voiceName = voice || prefs.ttsVoice || 'Puck';
 
   console.log(`[AI TTS] Synthesizing speech using voice "${voiceName}" for text: "${text.substring(0, 40)}..."`);
   const model = genAIInstance.client.getGenerativeModel({

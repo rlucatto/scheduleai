@@ -212,12 +212,12 @@ app.post('/api/assistant/chat', async (req, res) => {
 });
 
 app.post('/api/assistant/tts', async (req, res) => {
-  const { text } = req.body;
+  const { text, voice } = req.body;
   if (!text) {
     return res.status(400).json({ error: 'Text is required' });
   }
   try {
-    const audio = await synthesizeSpeech(text);
+    const audio = await synthesizeSpeech(text, voice);
     res.json({ audio });
   } catch (error) {
     console.error('TTS Endpoint Error:', error);

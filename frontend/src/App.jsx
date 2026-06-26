@@ -218,6 +218,58 @@ function App() {
     }
   };
 
+  const [isTestingVoice, setIsTestingVoice] = useState(false);
+
+  const handleTestVoice = async () => {
+    const testText = "Olá! Este é um teste da voz selecionada no ScheduleAI.";
+    setIsTestingVoice(true);
+    
+    if (audioElement) {
+      try {
+        audioElement.pause();
+      } catch (e) {}
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    if (preferences.ttsMode === 'browser') {
+      speakBrowser(testText, preferences.ttsVoice);
+      setIsTestingVoice(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/assistant/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: testText, voice: preferences.ttsVoice })
+      });
+
+      if (!res.ok) {
+        throw new Error('TTS test failed');
+      }
+
+      const data = await res.json();
+      if (data.audio) {
+        const audioUrl = `data:audio/wav;base64,${data.audio}`;
+        const newAudio = new Audio(audioUrl);
+        setAudioElement(newAudio);
+        newAudio.play().catch(e => {
+          console.warn('[TTS Test] Autoplay blocked, falling back to browser speak:', e);
+          speakBrowser(testText, preferences.ttsVoice);
+        });
+      } else {
+        throw new Error('No audio returned');
+      }
+    } catch (err) {
+      console.warn('[TTS Test] Gemini test failed, falling back to Browser TTS:', err.message);
+      speakBrowser(testText, preferences.ttsVoice);
+    } finally {
+      setIsTestingVoice(false);
+    }
+  };
+
   // Speech Recognition Web API (STT) setup
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -882,33 +934,46 @@ function App() {
 
               <div className="form-group">
                 <label>Voz do Assistente (TTS)</label>
-                {(!preferences.ttsMode || preferences.ttsMode === 'gemini') ? (
-                  <select 
-                    className="form-input"
-                    value={preferences.ttsVoice || 'Puck'}
-                    onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {(!preferences.ttsMode || preferences.ttsMode === 'gemini') ? (
+                    <select 
+                      className="form-input"
+                      value={preferences.ttsVoice || 'Puck'}
+                      onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                      style={{ flex: 1 }}
+                    >
+                      <option value="Puck">👦 Puck (Masculino - Padrão)</option>
+                      <option value="Charon">👨 Charon (Masculino Calmo)</option>
+                      <option value="Kore">👩 Kore (Feminino Claro)</option>
+                      <option value="Fenrir">🧔 Fenrir (Masculino Profundo)</option>
+                      <option value="Aoede">👧 Aoede (Feminino Brilhante)</option>
+                    </select>
+                  ) : (
+                    <select 
+                      className="form-input"
+                      value={preferences.ttsVoice || ''}
+                      onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                      style={{ flex: 1 }}
+                    >
+                      {browserVoices.length === 0 ? (
+                        <option value="">Nenhuma voz pt-BR encontrada no sistema</option>
+                      ) : (
+                        browserVoices.map(v => (
+                          <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>
+                        ))
+                      )}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={handleTestVoice}
+                    disabled={isTestingVoice}
+                    style={{ padding: '0 12px', fontSize: '12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
                   >
-                    <option value="Puck">👦 Puck (Masculino - Padrão)</option>
-                    <option value="Charon">👨 Charon (Masculino Calmo)</option>
-                    <option value="Kore">👩 Kore (Feminino Claro)</option>
-                    <option value="Fenrir">🧔 Fenrir (Masculino Profundo)</option>
-                    <option value="Aoede">👧 Aoede (Feminino Brilhante)</option>
-                  </select>
-                ) : (
-                  <select 
-                    className="form-input"
-                    value={preferences.ttsVoice || ''}
-                    onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
-                  >
-                    {browserVoices.length === 0 ? (
-                      <option value="">Nenhuma voz pt-BR encontrada no sistema</option>
-                    ) : (
-                      browserVoices.map(v => (
-                        <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>
-                      ))
-                    )}
-                  </select>
-                )}
+                    {isTestingVoice ? 'Ouvindo...' : 'Testar'}
+                  </button>
+                </div>
               </div>
 
               <div className="form-group">
