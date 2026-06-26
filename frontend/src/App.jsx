@@ -41,12 +41,54 @@ const renderFormattedMessage = (text) => {
     let lastIndex = 0;
     let match;
     
+    const parseRawUrlsAndBold = (subText) => {
+      const urlRegex = /(https?:\/\/[^\s()]+)/g;
+      const subParts = [];
+      let subLastIndex = 0;
+      let urlMatch;
+      
+      while ((urlMatch = urlRegex.exec(subText)) !== null) {
+        const matchIndex = urlMatch.index;
+        const textBefore = subText.substring(subLastIndex, matchIndex);
+        
+        if (textBefore) {
+          subParts.push(...parseBold(textBefore));
+        }
+        
+        let url = urlMatch[1];
+        if (url.endsWith('.') || url.endsWith(',') || url.endsWith(')')) {
+          url = url.substring(0, url.length - 1);
+        }
+        
+        subParts.push(
+          <a 
+            key={`raw-url-${matchIndex}`} 
+            href={url} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ color: 'var(--accent-hover)', textDecoration: 'underline', fontWeight: '600', cursor: 'pointer' }}
+          >
+            {url}
+          </a>
+        );
+        
+        subLastIndex = urlRegex.lastIndex;
+      }
+      
+      const textAfter = subText.substring(subLastIndex);
+      if (textAfter) {
+        subParts.push(...parseBold(textAfter));
+      }
+      
+      return subParts;
+    };
+    
     while ((match = linkRegex.exec(paragraph)) !== null) {
       const matchIndex = match.index;
       const textBefore = paragraph.substring(lastIndex, matchIndex);
       
       if (textBefore) {
-        parts.push(...parseBold(textBefore));
+        parts.push(...parseRawUrlsAndBold(textBefore));
       }
       
       const linkText = match[1];
@@ -69,7 +111,7 @@ const renderFormattedMessage = (text) => {
     
     const textAfter = paragraph.substring(lastIndex);
     if (textAfter) {
-      parts.push(...parseBold(textAfter));
+      parts.push(...parseRawUrlsAndBold(textAfter));
     }
     
     return <p key={pIdx}>{parts}</p>;
