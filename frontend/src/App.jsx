@@ -58,7 +58,7 @@ const renderFormattedMessage = (text) => {
           href={linkUrl} 
           target="_blank" 
           rel="noopener noreferrer" 
-          style={{ color: 'var(--accent)', textDecoration: 'underline', fontWeight: '600' }}
+          style={{ color: 'var(--accent-hover)', textDecoration: 'underline', fontWeight: '600', cursor: 'pointer' }}
         >
           {linkText}
         </a>
