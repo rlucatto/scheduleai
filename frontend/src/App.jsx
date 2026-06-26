@@ -62,6 +62,7 @@ function App() {
     prepTimeMinutes: 60,
     leadTimeMinutes: 15,
     advanceArrivalMinutes: 15,
+    ttsMode: 'gemini',
     ttsVoice: 'Puck'
   });
   
@@ -125,6 +126,50 @@ function App() {
     handleSendChatRef.current = handleSendChat;
   });
 
+  const [browserVoices, setBrowserVoices] = useState([]);
+
+  useEffect(() => {
+    if (!window.speechSynthesis) return;
+    
+    const updateVoices = () => {
+      const allVoices = window.speechSynthesis.getVoices();
+      // Filter for Portuguese voices (pt-BR or pt-PT)
+      const ptVoices = allVoices.filter(v => 
+        v.lang.toLowerCase().includes('pt-br') || 
+        v.lang.toLowerCase().includes('pt_br') || 
+        v.lang.toLowerCase().includes('pt-pt') || 
+        v.lang.toLowerCase().includes('pt_pt')
+      );
+      setBrowserVoices(ptVoices);
+    };
+
+    updateVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
+
+  const speakBrowser = (text, voiceName) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    
+    const cleanText = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'pt-BR';
+    
+    const allVoices = window.speechSynthesis.getVoices();
+    const selectedVoice = allVoices.find(v => v.name === voiceName);
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    } else {
+      // Fallback to first pt-BR voice
+      const ptVoice = allVoices.find(v => v.lang.toLowerCase().includes('pt-br') || v.lang.toLowerCase().includes('pt_br'));
+      if (ptVoice) utterance.voice = ptVoice;
+    }
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
   const speakText = async (text) => {
     if (!text) return;
     
@@ -137,6 +182,11 @@ function App() {
     // Cancel browser synthesis
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
+    }
+
+    if (preferences.ttsMode === 'browser') {
+      speakBrowser(text, preferences.ttsVoice);
+      return;
     }
 
     try {
@@ -157,32 +207,15 @@ function App() {
         setAudioElement(newAudio);
         newAudio.play().catch(e => {
           console.warn('[TTS] Autoplay blocked, falling back to Web Speech API:', e);
-          fallbackSpeak(text);
+          speakBrowser(text, preferences.ttsVoice);
         });
       } else {
         throw new Error('No audio in response');
       }
     } catch (err) {
       console.warn('[TTS] Gemini TTS failed, falling back to Browser Web Speech API:', err.message);
-      fallbackSpeak(text);
+      speakBrowser(text, preferences.ttsVoice);
     }
-  };
-
-  const fallbackSpeak = (text) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    
-    const cleanText = text.replace(/\*\*([^*]+)\*\*/g, '$1');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'pt-BR';
-    
-    const voices = window.speechSynthesis.getVoices();
-    const ptVoice = voices.find(v => v.lang.includes('pt-BR') || v.lang.includes('pt_BR'));
-    if (ptVoice) {
-      utterance.voice = ptVoice;
-    }
-    
-    window.speechSynthesis.speak(utterance);
   };
 
   // Speech Recognition Web API (STT) setup
@@ -832,18 +865,50 @@ function App() {
               </div>
 
               <div className="form-group">
-                <label>Voz do Assistente (TTS)</label>
+                <label>Modo de Voz (TTS)</label>
                 <select 
                   className="form-input"
-                  value={preferences.ttsVoice || 'Puck'}
-                  onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                  value={preferences.ttsMode || 'gemini'}
+                  onChange={e => {
+                    const mode = e.target.value;
+                    const defaultVoice = mode === 'gemini' ? 'Puck' : (browserVoices[0]?.name || '');
+                    setPreferences({...preferences, ttsMode: mode, ttsVoice: defaultVoice});
+                  }}
                 >
-                  <option value="Puck">👦 Puck (Masculino - Padrão)</option>
-                  <option value="Charon">👨 Charon (Masculino Calmo)</option>
-                  <option value="Kore">👩 Kore (Feminino Claro)</option>
-                  <option value="Fenrir">🧔 Fenrir (Masculino Profundo)</option>
-                  <option value="Aoede">👧 Aoede (Feminino Brilhante)</option>
+                  <option value="gemini">☁️ Gemini (Nuvem)</option>
+                  <option value="browser">💻 Navegador (Local - 100% BR)</option>
                 </select>
+              </div>
+
+              <div className="form-group">
+                <label>Voz do Assistente (TTS)</label>
+                {(!preferences.ttsMode || preferences.ttsMode === 'gemini') ? (
+                  <select 
+                    className="form-input"
+                    value={preferences.ttsVoice || 'Puck'}
+                    onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                  >
+                    <option value="Puck">👦 Puck (Masculino - Padrão)</option>
+                    <option value="Charon">👨 Charon (Masculino Calmo)</option>
+                    <option value="Kore">👩 Kore (Feminino Claro)</option>
+                    <option value="Fenrir">🧔 Fenrir (Masculino Profundo)</option>
+                    <option value="Aoede">👧 Aoede (Feminino Brilhante)</option>
+                  </select>
+                ) : (
+                  <select 
+                    className="form-input"
+                    value={preferences.ttsVoice || ''}
+                    onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                  >
+                    {browserVoices.length === 0 ? (
+                      <option value="">Nenhuma voz pt-BR encontrada no sistema</option>
+                    ) : (
+                      browserVoices.map(v => (
+                        <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>
+                      ))
+                    )}
+                  </select>
+                )}
               </div>
 
               <div className="form-group">
@@ -1084,7 +1149,7 @@ function App() {
                 <Volume2 size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
                 <div>
                   <span style={{ color: 'var(--text-secondary)' }}>Voz do Assistente: </span>
-                  <strong>{preferences.ttsVoice || 'Puck'}</strong>
+                  <strong>{preferences.ttsVoice || 'Puck'}</strong> <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>({(!preferences.ttsMode || preferences.ttsMode === 'gemini') ? 'Gemini' : 'Navegador'})</span>
                 </div>
               </div>
             </div>
