@@ -87,6 +87,9 @@ function App() {
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [canDrag, setCanDrag] = useState(false);
 
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [currentSpeakingText, setCurrentSpeakingText] = useState('');
+
   const chatEndRef = useRef(null);
 
   const [theme, setTheme] = useState(() => {
@@ -167,6 +170,21 @@ function App() {
       if (ptVoice) utterance.voice = ptVoice;
     }
     
+    utterance.onstart = () => {
+      setIsPlayingAudio(true);
+      setCurrentSpeakingText(text);
+    };
+    
+    utterance.onend = () => {
+      setIsPlayingAudio(false);
+      setCurrentSpeakingText('');
+    };
+    
+    utterance.onerror = () => {
+      setIsPlayingAudio(false);
+      setCurrentSpeakingText('');
+    };
+    
     window.speechSynthesis.speak(utterance);
   };
 
@@ -183,6 +201,9 @@ function App() {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
+    
+    setIsPlayingAudio(false);
+    setCurrentSpeakingText('');
 
     if (preferences.ttsMode === 'browser') {
       speakBrowser(text, preferences.ttsVoice);
@@ -204,6 +225,18 @@ function App() {
       if (data.audio) {
         const audioUrl = `data:audio/wav;base64,${data.audio}`;
         const newAudio = new Audio(audioUrl);
+        newAudio.onplay = () => {
+          setIsPlayingAudio(true);
+          setCurrentSpeakingText(text);
+        };
+        newAudio.onended = () => {
+          setIsPlayingAudio(false);
+          setCurrentSpeakingText('');
+        };
+        newAudio.onpause = () => {
+          setIsPlayingAudio(false);
+          setCurrentSpeakingText('');
+        };
         setAudioElement(newAudio);
         newAudio.play().catch(e => {
           console.warn('[TTS] Autoplay blocked, falling back to Web Speech API:', e);
@@ -216,6 +249,20 @@ function App() {
       console.warn('[TTS] Gemini TTS failed, falling back to Browser Web Speech API:', err.message);
       speakBrowser(text, preferences.ttsVoice);
     }
+  };
+
+  const stopSpeaking = () => {
+    if (audioElement) {
+      try {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+      } catch (e) {}
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+    setCurrentSpeakingText('');
   };
 
   const [isTestingVoice, setIsTestingVoice] = useState(false);
@@ -254,6 +301,18 @@ function App() {
       if (data.audio) {
         const audioUrl = `data:audio/wav;base64,${data.audio}`;
         const newAudio = new Audio(audioUrl);
+        newAudio.onplay = () => {
+          setIsPlayingAudio(true);
+          setCurrentSpeakingText(testText);
+        };
+        newAudio.onended = () => {
+          setIsPlayingAudio(false);
+          setCurrentSpeakingText('');
+        };
+        newAudio.onpause = () => {
+          setIsPlayingAudio(false);
+          setCurrentSpeakingText('');
+        };
         setAudioElement(newAudio);
         newAudio.play().catch(e => {
           console.warn('[TTS Test] Autoplay blocked, falling back to browser speak:', e);
@@ -1229,28 +1288,52 @@ function App() {
               })}
               
               {msg.sender === 'assistant' && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
-                  <button
-                    type="button"
-                    className="chat-speaker-btn"
-                    onClick={() => speakText(msg.text)}
-                    title="Ouvir resposta"
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      opacity: 0.6,
-                      padding: '2px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      fontSize: '11px',
-                      transition: 'opacity 0.2s'
-                    }}
-                  >
-                    <Volume2 size={12} /> Ouvir
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', gap: '8px' }}>
+                  {isPlayingAudio && currentSpeakingText === msg.text ? (
+                    <button
+                      type="button"
+                      className="chat-speaker-btn"
+                      onClick={stopSpeaking}
+                      title="Parar de ouvir"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--danger)',
+                        cursor: 'pointer',
+                        opacity: 0.8,
+                        padding: '2px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '11px',
+                        transition: 'opacity 0.2s'
+                      }}
+                    >
+                      <VolumeX size={12} /> Parar
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="chat-speaker-btn"
+                      onClick={() => speakText(msg.text)}
+                      title="Ouvir resposta"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        opacity: 0.6,
+                        padding: '2px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '11px',
+                        transition: 'opacity 0.2s'
+                      }}
+                    >
+                      <Volume2 size={12} /> Ouvir
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1268,7 +1351,91 @@ function App() {
         </div>
 
         {/* Message Input field */}
-        <div className="chat-input-area">
+        <div className="chat-input-area" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          
+          {/* Quick Voice Selector & Playback Control Bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', background: 'rgba(255,255,255,0.02)', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', width: '100%', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
+              <Volume2 size={14} style={{ color: 'var(--accent-hover)', flexShrink: 0 }} />
+              <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', flexShrink: 0 }}>Voz:</span>
+              <select
+                value={`${preferences.ttsMode || 'gemini'}:${preferences.ttsVoice || 'Puck'}`}
+                onChange={async (e) => {
+                  const [mode, voice] = e.target.value.split(':');
+                  const updatedPrefs = { ...preferences, ttsMode: mode, ttsVoice: voice };
+                  setPreferences(updatedPrefs);
+                  
+                  // Save automatically to backend
+                  try {
+                    await fetch(`${BACKEND_URL}/api/preferences`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(updatedPrefs)
+                    });
+                  } catch (err) {
+                    console.error('Error saving voice preference:', err);
+                  }
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  padding: '2px 4px',
+                  width: '100%',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                <optgroup label="☁️ Gemini (Nuvem)">
+                  <option value="gemini:Puck" style={{ background: '#18181b', color: 'white' }}>Puck (Masculino Padrão)</option>
+                  <option value="gemini:Charon" style={{ background: '#18181b', color: 'white' }}>Charon (Masculino Calmo)</option>
+                  <option value="gemini:Kore" style={{ background: '#18181b', color: 'white' }}>Kore (Feminino Claro)</option>
+                  <option value="gemini:Fenrir" style={{ background: '#18181b', color: 'white' }}>Fenrir (Masculino Profundo)</option>
+                  <option value="gemini:Aoede" style={{ background: '#18181b', color: 'white' }}>Aoede (Feminino Brilhante)</option>
+                </optgroup>
+                <optgroup label="💻 Navegador (Local - 100% BR)">
+                  {browserVoices.length === 0 ? (
+                    <option value="browser:" disabled style={{ background: '#18181b', color: 'var(--text-secondary)' }}>Nenhuma voz local encontrada</option>
+                  ) : (
+                    browserVoices.map(v => (
+                      <option key={v.name} value={`browser:${v.name}`} style={{ background: '#18181b', color: 'white' }}>
+                        {v.name.replace(/Microsoft|Google/gi, '').trim()} ({v.lang})
+                      </option>
+                    ))
+                  )}
+                </optgroup>
+              </select>
+            </div>
+            
+            {isPlayingAudio && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={stopSpeaking}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  color: 'var(--danger)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  background: 'rgba(239, 68, 68, 0.05)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer'
+                }}
+              >
+                <VolumeX size={12} /> Parar Fala
+              </button>
+            )}
+          </div>
+
           <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%' }}>
             <button
               type="button"
@@ -1344,7 +1511,7 @@ function App() {
               <div key={calc.eventId} className="card event-card has-triggers glass">
                 <div className="event-header">
                   <span className="event-time">
-                    {formatTime(calc.eventStart)}
+                    {formatDate(calc.eventStart)} - {formatTime(calc.eventStart)}
                   </span>
                   <button className="btn btn-secondary" style={{ padding: '4px', border: 'none', background: 'transparent' }} onClick={() => handleDeleteEvent(calc.eventId)}>
                     <Trash2 size={15} style={{ color: 'var(--danger)' }} />

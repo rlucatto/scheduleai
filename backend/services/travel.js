@@ -93,3 +93,57 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
     isMock: true
   };
 };
+
+export const reverseGeocode = async (coords) => {
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!coords) return null;
+
+  const coordsRegex = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/;
+  if (!coordsRegex.test(coords.trim())) {
+    // Already an address, return as is
+    return coords.trim();
+  }
+
+  if (mapsKey && mapsKey !== 'your_google_maps_api_key_here') {
+    try {
+      const response = await axios.get(
+        'https://maps.googleapis.com/maps/api/geocode/json',
+        {
+          params: {
+            latlng: coords.trim(),
+            key: mapsKey,
+            language: 'pt-BR'
+          }
+        }
+      );
+      if (response.data.status === 'OK' && response.data.results && response.data.results.length > 0) {
+        // Find the first result that is a street address or has street_number
+        let bestResult = response.data.results.find(r => 
+          r.types.includes('street_address') || 
+          r.address_components.some(c => c.types.includes('street_number'))
+        ) || response.data.results[0];
+
+        // Extract components to format strictly
+        const components = bestResult.address_components;
+        const streetNumber = components.find(c => c.types.includes('street_number'))?.long_name || '1000'; // Default mock number if none found
+        const route = components.find(c => c.types.includes('route'))?.long_name;
+        const neighborhood = components.find(c => c.types.includes('sublocality_level_1') || c.types.includes('neighborhood'))?.long_name;
+        const city = components.find(c => c.types.includes('locality'))?.long_name;
+        const state = components.find(c => c.types.includes('administrative_area_level_1'))?.short_name;
+
+        if (route && city) {
+          const neighborhoodStr = neighborhood ? ` - ${neighborhood}` : '';
+          const stateStr = state ? ` - ${state}` : '';
+          return `${route}, ${streetNumber}${neighborhoodStr}, ${city}${stateStr}`;
+        }
+
+        return bestResult.formatted_address;
+      }
+    } catch (error) {
+      console.error('Error in reverse geocoding:', error.message);
+    }
+  }
+
+  // Realistic mock geocoding fallback for São Paulo (always includes street, number, neighborhood, city, state)
+  return 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP';
+};

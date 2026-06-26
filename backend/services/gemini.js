@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import { listEvents, insertEvent, deleteEvent, updateEvent } from './calendar.js';
-import { getTravelTime } from './travel.js';
+import { getTravelTime, reverseGeocode } from './travel.js';
 import { listTasks, insertTask } from './tasks.js';
 import { calculateDailyBudget, planGoalIntent, planReverseDeadline, compareSchedulingDays } from './planning.js';
 import { getPreferences, setPreferences } from './scheduler.js';
@@ -11,6 +11,44 @@ import { searchGoogleContacts, createGoogleContact } from './contacts.js';
 dotenv.config();
 
 let lastModelUsed = '';
+
+const handleUpdateUserPreferences = async (args) => {
+  const coordsRegex = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/;
+
+  if (args.homeAddress && coordsRegex.test(args.homeAddress.trim())) {
+    const resolved = await reverseGeocode(args.homeAddress);
+    return {
+      error: `CONFIRMAÇÃO NECESSÁRIA: O endereço correspondente às coordenadas é '${resolved}'. Pergunte ao usuário: 'O endereço correspondente à sua localização atual é ${resolved}. Confirma que este é o seu endereço de casa?'`,
+      status: 'needs_confirmation',
+      addressType: 'homeAddress',
+      resolvedAddress: resolved
+    };
+  }
+
+  if (args.workAddress && coordsRegex.test(args.workAddress.trim())) {
+    const resolved = await reverseGeocode(args.workAddress);
+    return {
+      error: `CONFIRMAÇÃO NECESSÁRIA: O endereço correspondente às coordenadas é '${resolved}'. Pergunte ao usuário: 'O endereço correspondente à sua localização atual é ${resolved}. Confirma que este é o seu endereço de trabalho?'`,
+      status: 'needs_confirmation',
+      addressType: 'workAddress',
+      resolvedAddress: resolved
+    };
+  }
+
+  return setPreferences(args);
+};
+
+const formatDateTimePtBr = (isoString) => {
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    const day = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `${day} às ${time}`;
+  } catch (e) {
+    return isoString;
+  }
+};
 
 export const getLastModelUsed = () => lastModelUsed;
 
@@ -254,7 +292,20 @@ O usuário fala em português. Suas principais responsabilidades são:
       - Se houver apenas 1 compromisso que corresponda ao nome/palavra-chave informada, chame diretamente a ferramenta \`delete_calendar_event\` com o ID desse compromisso para excluí-lo.
       - Se houver múltiplos compromissos correspondentes, liste as opções encontradas (mostrando título, data/hora e local) e pergunte de forma clara ao usuário qual deles ele deseja excluir.
       - Se o usuário estiver respondendo a uma pergunta de esclarecimento sobre qual evento apagar de uma lista de múltiplos compromissos (ex: "quero apagar o da pista premium"), você DEVE obrigatoriamente chamar a ferramenta \`list_calendar_events\` primeiro para listar os eventos novamente, localizar o ID correspondente ao evento selecionado e, em seguida, chamar \`delete_calendar_event\` com esse ID correto. NUNCA tente adivinhar, inventar ou alucinar IDs (como "mock-event-xxx" ou IDs aleatórios).
-      - Se não encontrar nenhum compromisso correspondente, informe ao usuário de forma amigável que não localizou esse evento na agenda.`;
+      - Se não encontrar nenhum compromisso correspondente, informe ao usuário de forma amigável que não localizou esse evento na agenda.
+7. CONFIRMAÇÃO DE ENDEREÇOS POR COORDENADAS: Se o usuário pedir para definir sua localização atual (ou coordenadas geográficas) como seu endereço de casa (homeAddress) ou de trabalho (workAddress):
+    - Chame a ferramenta 'update_user_preferences' com o valor de 'origin' (coordenadas atuais) ou as coordenadas fornecidas atribuídas ao parâmetro correspondente (homeAddress ou workAddress).
+    - Se a ferramenta retornar um status de confirmação pendente ('needs_confirmation'), você DEVE apresentar o endereço resolvido ('resolvedAddress') ao usuário e perguntar explicitamente se ele está correto (ex: "O endereço correspondente à sua localização atual é 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP'. Confirma que este é o seu endereço de casa?").
+    - NÃO salve o endereço ainda. Aguarde a confirmação do usuário.
+    - Quando o usuário confirmar que está correto ("sim", "correto", "pode salvar", etc.), chame a ferramenta 'update_user_preferences' novamente, passando o endereço por extenso resolvido (o texto completo retornado em 'resolvedAddress') para o parâmetro correto.
+8. CONFIRMAÇÃO OBRIGATÓRIA PARA CRIAÇÃO E EXCLUSÃO DE COMPROMISSOS:
+    - Antes de efetuar qualquer criação ('create_calendar_event') ou exclusão ('delete_calendar_event') de evento no calendário, você DEVE apresentar um resumo dos detalhes da operação ao usuário e solicitar sua confirmação explícita.
+    - Na primeira chamada de 'create_calendar_event' ou 'delete_calendar_event', deixe o parâmetro 'confirmed' como false ou omitido.
+    - A ferramenta retornará informando que a confirmação é necessária (status 'needs_confirmation'). Apresente o resumo ao usuário (ex: "Vou agendar 'Reunião' para amanhã das 14h às 15h. Você confirma?") e aguarde sua resposta.
+    - Somente se o usuário confirmar positivamente ("sim", "correto", "pode salvar", "pode apagar", etc.), chame a ferramenta novamente definindo 'confirmed: true' para efetivar a alteração.
+9. FORMATO E OBTENÇÃO DE ENDEREÇO/LOCALIZAÇÃO: Sempre que o usuário perguntar qual é o seu endereço, sua localização, sua origem ou seu endereço/localização atual (ou origem atual):
+    - Se a informação nas preferências (qualquer campo como 'origin', 'homeAddress' ou 'workAddress') estiver no formato de coordenadas geográficas ("latitude,longitude"), você DEVE obrigatoriamente chamar a ferramenta 'reverse_geocode' para obter o endereço por extenso correspondente antes de responder ao usuário.
+    - Você DEVE sempre apresentar a resposta final ao usuário contendo a Cidade, a Rua e o Número por extenso (ex: "Avenida Paulista, 1000 - Bela Vista, São Paulo - SP"). NUNCA apresente coordenadas de latitude/longitude na sua resposta de texto para o usuário sob nenhuma hipótese.`;
 
 // Declare tools for Gemini function calling
 const calendarTools = {
@@ -280,7 +331,8 @@ const calendarTools = {
           location: { type: 'STRING', description: 'Local físico do compromisso (ex: Restaurante Rubaiyat Faria Lima)' },
           description: { type: 'STRING', description: 'Descrição adicional ou notas do evento' },
           startTime: { type: 'STRING', description: 'Data/Hora de início no formato ISO (ex: 2026-06-24T21:00:00Z)' },
-          endTime: { type: 'STRING', description: 'Data/Hora de término no formato ISO (ex: 2026-06-24T23:00:00Z)' }
+          endTime: { type: 'STRING', description: 'Data/Hora de término no formato ISO (ex: 2026-06-24T23:00:00Z)' },
+          confirmed: { type: 'BOOLEAN', description: 'Defina como true apenas se o usuário confirmou explicitamente o agendamento deste evento específico. Deixe false ou omitido na primeira tentativa.' }
         },
         required: ['summary', 'startTime', 'endTime']
       }
@@ -291,7 +343,8 @@ const calendarTools = {
       parameters: {
         type: 'OBJECT',
         properties: {
-          eventId: { type: 'STRING', description: 'O ID exclusivo do evento a ser excluído (ex: mock-event-1)' }
+          eventId: { type: 'STRING', description: 'O ID exclusivo do evento a ser excluído (ex: mock-event-1)' },
+          confirmed: { type: 'BOOLEAN', description: 'Defina como true apenas se o usuário confirmou explicitamente a exclusão deste compromisso específico. Deixe false ou omitido na primeira tentativa.' }
         },
         required: ['eventId']
       }
@@ -422,6 +475,17 @@ const calendarTools = {
           address: { type: 'STRING', description: 'Endereço residencial ou comercial do contato.' }
         },
         required: ['name']
+      }
+    },
+    {
+      name: 'reverse_geocode',
+      description: 'Obtém o endereço por extenso contendo cidade, rua e número a partir de coordenadas geográficas (latitude,longitude).',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          coordinates: { type: 'STRING', description: 'Coordenadas geográficas no formato "latitude,longitude" (ex: -23.5616,-46.6560)' }
+        },
+        required: ['coordinates']
       }
     }
   ]
@@ -921,6 +985,9 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
   let turns = 0;
   const maxTurns = 5;
 
+  let needsConfirmation = false;
+  let confirmationText = '';
+
   while (toolCalls.length > 0 && turns < maxTurns) {
     turns++;
     console.log(`[OLLAMA] Model requested ${toolCalls.length} tool calls on turn ${turns}.`);
@@ -936,6 +1003,13 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
         if (name === 'list_calendar_events') {
           functionResult = await listEvents(args.timeMin, args.timeMax);
         } else if (name === 'create_calendar_event') {
+          if (!args.confirmed) {
+            const dateStr = formatDateTimePtBr(args.startTime);
+            const locStr = args.location ? ` no local "${args.location}"` : '';
+            confirmationText = `Você confirma o agendamento do compromisso "${args.summary}" para ${dateStr}${locStr}?`;
+            needsConfirmation = true;
+            break;
+          }
           functionResult = await insertEvent({
             summary: args.summary,
             location: args.location,
@@ -944,6 +1018,21 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
             end: { dateTime: args.endTime }
           });
         } else if (name === 'delete_calendar_event') {
+          if (!args.confirmed) {
+            let eventSummary = 'compromisso';
+            try {
+              const events = await listEvents();
+              const event = events.find(e => e.id === args.eventId);
+              if (event) {
+                eventSummary = `"${event.summary}" agendado para ${formatDateTimePtBr(event.start.dateTime || event.start.date)}`;
+              }
+            } catch (e) {
+              console.error('Error fetching event for deletion confirmation:', e);
+            }
+            confirmationText = `Você confirma a exclusão do ${eventSummary}?`;
+            needsConfirmation = true;
+            break;
+          }
           functionResult = await deleteEvent(args.eventId);
         } else if (name === 'check_travel_time') {
           functionResult = await getTravelTime(getPreferences().origin, args.destination, args.transportMode);
@@ -974,11 +1063,18 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
             context: args.context
           });
         } else if (name === 'update_user_preferences') {
-          functionResult = setPreferences(args);
+          functionResult = await handleUpdateUserPreferences(args);
+          if (functionResult && functionResult.status === 'needs_confirmation') {
+            confirmationText = functionResult.error;
+            needsConfirmation = true;
+            break;
+          }
         } else if (name === 'search_contacts') {
           functionResult = await searchGoogleContacts(args.query);
         } else if (name === 'create_contact') {
           functionResult = await createGoogleContact(args);
+        } else if (name === 'reverse_geocode') {
+          functionResult = { address: await reverseGeocode(args.coordinates) };
         } else {
           functionResult = { error: `Function ${name} not found.` };
         }
@@ -995,6 +1091,10 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
       });
     }
 
+    if (needsConfirmation) {
+      break;
+    }
+
     console.log('[OLLAMA] Sending follow-up request with tool results...');
     const followUpResponse = await axios.post('http://localhost:11434/api/chat', {
       model: modelName,
@@ -1005,6 +1105,13 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
 
     assistantMessage = followUpResponse.data.message;
     toolCalls = parseOllamaToolCalls(assistantMessage);
+  }
+
+  if (needsConfirmation) {
+    return {
+      text: confirmationText,
+      toolCalls: allExecutedToolCalls
+    };
   }
 
   return {
@@ -1052,12 +1159,16 @@ export const chatWithAssistant = async (message, history = []) => {
         });
 
         let result = await chat.sendMessage(message);
+        console.log("[AI] Raw model response:", JSON.stringify(result.response, null, 2));
         let responseText = '';
         let toolCalls = result.response.functionCalls() || [];
         let allExecutedToolCalls = [];
 
         let turns = 0;
         const maxTurns = 5;
+
+        let needsConfirmation = false;
+        let confirmationText = '';
 
         while (toolCalls.length > 0 && turns < maxTurns) {
           turns++;
@@ -1074,6 +1185,13 @@ export const chatWithAssistant = async (message, history = []) => {
               if (name === 'list_calendar_events') {
                 functionResult = await listEvents(args.timeMin, args.timeMax);
               } else if (name === 'create_calendar_event') {
+                if (!args.confirmed) {
+                  const dateStr = formatDateTimePtBr(args.startTime);
+                  const locStr = args.location ? ` no local "${args.location}"` : '';
+                  confirmationText = `Você confirma o agendamento do compromisso "${args.summary}" para ${dateStr}${locStr}?`;
+                  needsConfirmation = true;
+                  break;
+                }
                 functionResult = await insertEvent({
                   summary: args.summary,
                   location: args.location,
@@ -1082,6 +1200,21 @@ export const chatWithAssistant = async (message, history = []) => {
                   end: { dateTime: args.endTime }
                 });
               } else if (name === 'delete_calendar_event') {
+                if (!args.confirmed) {
+                  let eventSummary = 'compromisso';
+                  try {
+                    const events = await listEvents();
+                    const event = events.find(e => e.id === args.eventId);
+                    if (event) {
+                      eventSummary = `"${event.summary}" agendado para ${formatDateTimePtBr(event.start.dateTime || event.start.date)}`;
+                    }
+                  } catch (e) {
+                    console.error('Error fetching event for deletion confirmation:', e);
+                  }
+                  confirmationText = `Você confirma a exclusão do ${eventSummary}?`;
+                  needsConfirmation = true;
+                  break;
+                }
                 functionResult = await deleteEvent(args.eventId);
               } else if (name === 'check_travel_time') {
                 functionResult = await getTravelTime(getPreferences().origin, args.destination, args.transportMode);
@@ -1112,11 +1245,18 @@ export const chatWithAssistant = async (message, history = []) => {
                   context: args.context
                 });
               } else if (name === 'update_user_preferences') {
-                functionResult = setPreferences(args);
+                functionResult = await handleUpdateUserPreferences(args);
+                if (functionResult && functionResult.status === 'needs_confirmation') {
+                  confirmationText = functionResult.error;
+                  needsConfirmation = true;
+                  break;
+                }
               } else if (name === 'search_contacts') {
                 functionResult = await searchGoogleContacts(args.query);
               } else if (name === 'create_contact') {
                 functionResult = await createGoogleContact(args);
+              } else if (name === 'reverse_geocode') {
+                functionResult = { address: await reverseGeocode(args.coordinates) };
               } else {
                 functionResult = { error: `Function ${name} not found.` };
               }
@@ -1133,9 +1273,20 @@ export const chatWithAssistant = async (message, history = []) => {
             });
           }
 
+          if (needsConfirmation) {
+            break;
+          }
+
           console.log(`[AI] Sending tool responses for turn ${turns}...`);
           result = await chat.sendMessage(toolResponses);
           toolCalls = result.response.functionCalls() || [];
+        }
+
+        if (needsConfirmation) {
+          return {
+            text: confirmationText,
+            toolCalls: allExecutedToolCalls
+          };
         }
 
         responseText = result.response.text();

@@ -338,7 +338,7 @@ startScheduler(io);
 server.listen(PORT, () => {
   console.log(`==================================================`);
   console.log(`🚀 ScheduleAI Server running on port ${PORT}`);
-  console.log(`📂 Base path: C:\\Users\\rluca\\.gemini\\antigravity-ide\\scratch\\calendar-ai-assistant\\backend`);
+  console.log(`📂 Base path: ${process.cwd()}`);
   console.log(`==================================================`);
 });
 
