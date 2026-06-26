@@ -27,11 +27,11 @@ import {
   VolumeX
 } from 'lucide-react';
 
-const BACKEND_URL = localStorage.getItem('backend_url') || 'http://localhost:5000';
+const BACKEND_URL = localStorage.getItem('backend_url') || 'https://scheduleai-hz68.onrender.com';
 
 function App() {
   const [backendUrlInput, setBackendUrlInput] = useState(() => {
-    return localStorage.getItem('backend_url') || 'http://localhost:5000';
+    return localStorage.getItem('backend_url') || 'https://scheduleai-hz68.onrender.com';
   });
   const [connectionTestStatus, setConnectionTestStatus] = useState('idle');
 
