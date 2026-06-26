@@ -1276,7 +1276,10 @@ export const synthesizeSpeech = async (text) => {
     throw new Error('Nenhuma chave Gemini disponível ou configurada.');
   }
 
-  console.log(`[AI TTS] Synthesizing speech for text: "${text.substring(0, 40)}..."`);
+  const prefs = getPreferences();
+  const voiceName = prefs.ttsVoice || 'Puck';
+
+  console.log(`[AI TTS] Synthesizing speech using voice "${voiceName}" for text: "${text.substring(0, 40)}..."`);
   const model = genAIInstance.client.getGenerativeModel({
     model: 'gemini-2.5-flash-preview-tts'
   });
@@ -1287,7 +1290,14 @@ export const synthesizeSpeech = async (text) => {
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
-      responseModalities: ['AUDIO']
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: {
+            voiceName: voiceName
+          }
+        }
+      }
     }
   });
 

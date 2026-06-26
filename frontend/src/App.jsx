@@ -61,7 +61,8 @@ function App() {
     transportMode: 'driving',
     prepTimeMinutes: 60,
     leadTimeMinutes: 15,
-    advanceArrivalMinutes: 15
+    advanceArrivalMinutes: 15,
+    ttsVoice: 'Puck'
   });
   
   const [calculations, setCalculations] = useState([]);
@@ -831,6 +832,21 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label>Voz do Assistente (TTS)</label>
+                <select 
+                  className="form-input"
+                  value={preferences.ttsVoice || 'Puck'}
+                  onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                >
+                  <option value="Puck">👦 Puck (Masculino - Padrão)</option>
+                  <option value="Charon">👨 Charon (Masculino Calmo)</option>
+                  <option value="Kore">👩 Kore (Feminino Claro)</option>
+                  <option value="Fenrir">🧔 Fenrir (Masculino Profundo)</option>
+                  <option value="Aoede">👧 Aoede (Feminino Brilhante)</option>
+                </select>
+              </div>
+
+              <div className="form-group">
                 <label>Tempo de Preparação (minutos)</label>
                 <input 
                   type="number" 
@@ -1062,6 +1078,13 @@ function App() {
                   >
                     Ver características dos modelos
                   </button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Volume2 size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Voz do Assistente: </span>
+                  <strong>{preferences.ttsVoice || 'Puck'}</strong>
                 </div>
               </div>
             </div>

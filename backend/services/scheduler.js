@@ -13,7 +13,8 @@ let userPreferences = {
   prepTimeMinutes: 60, // time before departure to get ready
   leadTimeMinutes: 15,  // time before departure to warn
   advanceArrivalMinutes: 15, // arrive 15 minutes early by default
-  modelPriority: ['gemini-2.5-flash', 'gemini-2.0-flash'] // priority list of models
+  modelPriority: ['gemini-2.5-flash', 'gemini-2.0-flash'], // priority list of models
+  ttsVoice: 'Puck' // TTS voice preference
 };
 
 // Store fired notifications to prevent duplicates
