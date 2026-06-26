@@ -1063,30 +1063,6 @@ function App() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <Link2 size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
-                <div style={{ flex: 1 }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Servidor Backend: </span>
-                  <strong style={{ wordBreak: 'break-all' }}>{BACKEND_URL}</strong>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={() => testConnection(BACKEND_URL)}
-                      disabled={connectionTestStatus === 'testing'}
-                      style={{ padding: '2px 8px', fontSize: '11px', height: '24px', display: 'flex', alignItems: 'center' }}
-                    >
-                      {connectionTestStatus === 'testing' ? 'Testando...' : 'Testar Conexão'}
-                    </button>
-                    {connectionTestStatus === 'success' && (
-                      <span style={{ color: '#4caf50', fontSize: '11px', fontWeight: '500' }}>✓ Online</span>
-                    )}
-                    {connectionTestStatus === 'failed' && (
-                      <span style={{ color: '#f44336', fontSize: '11px', fontWeight: '500' }}>✗ Offline</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
                 <Car size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
                 <div>
                   <span style={{ color: 'var(--text-secondary)' }}>Transporte: </span>
@@ -1143,13 +1119,6 @@ function App() {
                   >
                     Ver características dos modelos
                   </button>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Volume2 size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
-                <div>
-                  <span style={{ color: 'var(--text-secondary)' }}>Voz do Assistente: </span>
-                  <strong>{preferences.ttsVoice || 'Puck'}</strong> <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>({(!preferences.ttsMode || preferences.ttsMode === 'gemini') ? 'Gemini' : 'Navegador'})</span>
                 </div>
               </div>
             </div>
