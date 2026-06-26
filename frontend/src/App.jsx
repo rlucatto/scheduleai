@@ -27,6 +27,55 @@ import {
   VolumeX
 } from 'lucide-react';
 
+const parseBold = (text) => {
+  return text.split('**').map((chunk, cIdx) => {
+    return cIdx % 2 === 1 ? <strong key={`bold-${cIdx}`}>{chunk}</strong> : chunk;
+  });
+};
+
+const renderFormattedMessage = (text) => {
+  if (!text) return null;
+  return text.split('\n').map((paragraph, pIdx) => {
+    const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = linkRegex.exec(paragraph)) !== null) {
+      const matchIndex = match.index;
+      const textBefore = paragraph.substring(lastIndex, matchIndex);
+      
+      if (textBefore) {
+        parts.push(...parseBold(textBefore));
+      }
+      
+      const linkText = match[1];
+      const linkUrl = match[2];
+      
+      parts.push(
+        <a 
+          key={`link-${matchIndex}`} 
+          href={linkUrl} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          style={{ color: 'var(--accent)', textDecoration: 'underline', fontWeight: '600' }}
+        >
+          {linkText}
+        </a>
+      );
+      
+      lastIndex = linkRegex.lastIndex;
+    }
+    
+    const textAfter = paragraph.substring(lastIndex);
+    if (textAfter) {
+      parts.push(...parseBold(textAfter));
+    }
+    
+    return <p key={pIdx}>{parts}</p>;
+  });
+};
+
 const BACKEND_URL = localStorage.getItem('backend_url') || 'https://scheduleai-hz68.onrender.com';
 
 function App() {
@@ -1290,14 +1339,7 @@ function App() {
               key={index} 
               className={`message-bubble ${msg.sender}`}
             >
-              {/* Parse simple markdown highlights like bolding **text** */}
-              {msg.text.split('\n').map((paragraph, pIdx) => {
-                // Replace markdown bold tags
-                const formattedText = paragraph.split('**').map((chunk, cIdx) => {
-                  return cIdx % 2 === 1 ? <strong key={cIdx}>{chunk}</strong> : chunk;
-                });
-                return <p key={pIdx}>{formattedText}</p>;
-              })}
+              {renderFormattedMessage(msg.text)}
               
               {msg.sender === 'assistant' && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', gap: '8px' }}>
@@ -1535,7 +1577,14 @@ function App() {
                 {calc.location && (
                   <div className="event-location">
                     <MapPin size={14} style={{ color: 'var(--accent-hover)' }} />
-                    <span>{calc.location}</span>
+                    <a 
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(calc.location)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: 'var(--accent-hover)', textDecoration: 'underline', fontWeight: '500', cursor: 'pointer' }}
+                    >
+                      {calc.location}
+                    </a>
                   </div>
                 )}
 
