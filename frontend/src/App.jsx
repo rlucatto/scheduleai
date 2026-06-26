@@ -548,8 +548,10 @@ function App() {
         ...data.preferences,
         modelPriority: mergedPriority
       });
+      return data.status;
     } catch (err) {
       console.error('Error fetching auth status:', err);
+      return null;
     }
   };
 
@@ -778,9 +780,14 @@ function App() {
   // Setup WebSockets and Load Data
   useEffect(() => {
     const initData = async () => {
-      await fetchStatus();
+      const authStatus = await fetchStatus();
       await fetchTimeline();
       await fetchModelHealth();
+
+      if (authStatus && !authStatus.isConnected && authStatus.isConfigured) {
+        console.log('[AUTO-CONNECT] User not connected. Automatically triggering Google Calendar connection...');
+        connectGoogle();
+      }
 
       // Check geolocation and save it as origin
       if (navigator.geolocation) {
