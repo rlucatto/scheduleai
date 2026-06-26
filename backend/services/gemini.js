@@ -267,19 +267,52 @@ const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, message = '
   throw new Error('Todos os modelos (locais e Gemini) falharam ou estão indisponíveis.');
 };
 
+export const getTimezoneString = () => {
+  const offsetMinutes = new Date().getTimezoneOffset();
+  const offsetSign = offsetMinutes > 0 ? '-' : '+';
+  const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+  const offsetMins = Math.abs(offsetMinutes) % 60;
+  const formattedOffset = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+  return `UTC${formattedOffset}`;
+};
+
+export const enrichEventsWithLocalTime = (events) => {
+  if (!Array.isArray(events)) return events;
+  return events.map(e => {
+    const startStr = e.start?.dateTime || e.start?.date;
+    const endStr = e.end?.dateTime || e.end?.date;
+    
+    const formatLocal = (isoStr) => {
+      if (!isoStr) return '';
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return isoStr;
+      
+      const day = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return `${day} às ${time}`;
+    };
+
+    return {
+      ...e,
+      inicioLocal: formatLocal(startStr),
+      fimLocal: formatLocal(endStr)
+    };
+  });
+};
+
+
 export const systemInstruction = `Você é o "ScheduleAI", assistente pessoal inteligente em português.
 Regras de atuação:
 1. AGENDA E TAREFAS: Use as ferramentas sempre que o usuário pedir para criar, listar, alterar ou deletar compromissos e tarefas.
-2. EVENTOS PÚBLICOS (SHOWS): Se o usuário solicitar agendamento de show/evento público:
-   - Use o "Contexto de Busca na Internet" para encontrar local/horário de início.
-   - Agende na data solicitada pelo usuário (mesmo se a busca citar outra data).
-   - Defina início padrão (ex: 21:00) e duração padrão (3h) se omitidos. Cuidado com virada de meia-noite no endTime.
-   - Chame 'check_travel_time' (com destino exato do evento, origin vem das preferências) em paralelo com 'create_calendar_event'.
-   - Retorne o agendamento, tempo de deslocamento e horário de saída sugerido.
+2. EVENTOS E AGENDAMENTOS COM DESTINO: Se o usuário disser que precisa ir ao local/contato 'X' (ex: "preciso ir no shiva amanhã" ou "show do Ed Sheeran hoje"):
+   - **Ordem de Busca**: Você DEVE sempre chamar 'search_contacts' com 'X' imediatamente na primeira resposta, mesmo que o horário esteja omitido. Se retornar algum contato com o campo 'address' preenchido, use esse endereço como local. Se não encontrar o contato ou ele não tiver endereço cadastrado, faça a busca de lugares na internet (Yahoo/grounding).
+   - **Horário Omitido**: Se o usuário NÃO informou o horário do compromisso, após pesquisar o local/contato nas ferramentas de busca, você DEVE pedir o horário explicitamente na sua resposta para prosseguir, sem agendar nada ainda.
+   - **Show/Evento Público**: Se for show/evento público, use a busca para achar local/horário de início. Defina início padrão (21:00) e término padrão (3h de duração) se omitidos. Chame 'check_travel_time' (com destino do show) em paralelo com 'create_calendar_event'.
+   - **Proximidade e Alerta**: Sempre que o horário estiver definido, chame 'list_calendar_events' para o dia correspondente. Se o horário proposto estiver próximo (diferença menor ou igual a 1 hora de início/fim) de qualquer compromisso existente, você DEVE avisar proativamente sobre este outro compromisso próximo no seu resumo de confirmação (ex: "Você confirma? Note que você tem o compromisso 'X' às 'Y', que é próximo deste horário.").
 3. EXCLUSÃO DE COMPROMISSOS: Para apagar/cancelar, chame 'list_calendar_events' primeiro (busca ampla). Se houver 1 correspondência, exclua com 'delete_calendar_event'. Se múltiplas, apresente opções e peça para escolher. Se nenhuma, informe.
 4. CONFIRMAÇÃO DE COORDENADAS: Para homeAddress/workAddress com coordenadas, chame 'update_user_preferences'. Se retornar 'needs_confirmation', resolva com 'reverse_geocode', pergunte se o endereço resolvido está correto e só salve após a confirmação.
 5. CONFIRMAÇÃO DE CALENDÁRIO: Antes de criar/deletar eventos, chame a ferramenta com confirmed: false/omitido, apresente o resumo dos detalhes e peça confirmação. Só chame com confirmed: true após o aval do usuário.
-6. ENDEREÇOS: Ao informar endereço/localização, se estiver em coordenadas, use 'reverse_geocode' e mostre Cidade, Rua e Número. Nunca exiba coordenadas brutas.
+6. ENDEREÇOS: Ao informar endereço/localização, se estiver em coordenadas, use 'reverse_geocode' and mostre Cidade, Rua e Número. Nunca exiba coordenadas brutas.
 7. FILTRAGEM DE CONTATOS: Ao buscar endereço de contatos ('search_contacts'):
    - Se houver múltiplos registros com o mesmo nome, verifique o campo 'address'.
    - Se algum tiver endereço, liste APENAS esses que possuem endereço cadastrado.
@@ -890,7 +923,7 @@ const deepConvertTypesToLowercase = (obj) => {
 
 const callOllama = async (modelName, message, history, searchResultsContext) => {
   const prefs = getPreferences();
-  const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR')}. Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+  const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR')} (Fuso Horário ${getTimezoneString()}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${getTimezoneString()}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
   const systemPrompt = systemInstruction + currentRefDate + 
     `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
     (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '');
@@ -995,7 +1028,8 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
       let functionResult;
       try {
         if (name === 'list_calendar_events') {
-          functionResult = await listEvents(args.timeMin, args.timeMax);
+          const events = await listEvents(args.timeMin, args.timeMax);
+          functionResult = enrichEventsWithLocalTime(events);
         } else if (name === 'create_calendar_event') {
           if (!args.confirmed) {
             const dateStr = formatDateTimePtBr(args.startTime);
@@ -1129,7 +1163,7 @@ export const chatWithAssistant = async (message, history = []) => {
     return await executeWithFallback(
       // Gemini Handler
       async (genAIInstance, modelName) => {
-        const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR')}. Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+        const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR')} (Fuso Horário ${getTimezoneString()}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${getTimezoneString()}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
         const model = genAIInstance.getGenerativeModel({
           model: modelName,
           systemInstruction: systemInstruction + currentRefDate + 
@@ -1179,7 +1213,8 @@ export const chatWithAssistant = async (message, history = []) => {
             let functionResult;
             try {
               if (name === 'list_calendar_events') {
-                functionResult = await listEvents(args.timeMin, args.timeMax);
+                const events = await listEvents(args.timeMin, args.timeMax);
+                functionResult = enrichEventsWithLocalTime(events);
               } else if (name === 'create_calendar_event') {
                 if (!args.confirmed) {
                   const dateStr = formatDateTimePtBr(args.startTime);

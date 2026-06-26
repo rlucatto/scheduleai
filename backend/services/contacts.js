@@ -23,6 +23,13 @@ let mockContacts = [
     email: 'maria.santos@example.com',
     phone: '11777777777',
     address: 'Avenida Paulista, 1000, São Paulo, SP'
+  },
+  {
+    resourceName: 'people/shiva1',
+    name: 'Shiva',
+    email: 'shiva@example.com',
+    phone: '11977776666',
+    address: 'Rua Augusta, 1200, São Paulo, SP'
   }
 ];
 
@@ -86,6 +93,26 @@ export const searchGoogleContacts = async (query) => {
             address: 'Rua Augusta, 1500, São Paulo, SP'
           }
         ];
+      } else if (scenario === 'shiva_flow') {
+        return [
+          {
+            resourceName: 'people/shiva1',
+            name: 'Shiva',
+            email: 'shiva@example.com',
+            phone: '11977776666',
+            address: 'Rua Augusta, 1200, São Paulo, SP'
+          }
+        ];
+      } else if (scenario === 'shiva_no_address') {
+        return [
+          {
+            resourceName: 'people/shiva1',
+            name: 'Shiva',
+            email: 'shiva@example.com',
+            phone: '11977776666',
+            address: ''
+          }
+        ];
       }
     }
 
@@ -136,7 +163,7 @@ export const searchGoogleContacts = async (query) => {
 
 // Create a new contact
 export const createGoogleContact = async (contactData) => {
-  if (!isGoogleConnected || !oauth2Client) {
+  if (process.env.TEST_MOCK_CONTACTS === 'true' || !isGoogleConnected || !oauth2Client) {
     const newContact = {
       resourceName: `people/c${Date.now()}`,
       name: contactData.name || 'Sem Nome',
