@@ -6,7 +6,7 @@ import { getTravelTime, reverseGeocode } from './travel.js';
 import { listTasks, insertTask } from './tasks.js';
 import { calculateDailyBudget, planGoalIntent, planReverseDeadline, compareSchedulingDays } from './planning.js';
 import { getPreferences, setPreferences } from './scheduler.js';
-import { searchGoogleContacts, createGoogleContact } from './contacts.js';
+import { searchGoogleContacts, createGoogleContact, updateGoogleContact } from './contacts.js';
 
 dotenv.config();
 
@@ -267,48 +267,27 @@ const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, message = '
   throw new Error('Todos os modelos (locais e Gemini) falharam ou estão indisponíveis.');
 };
 
-// System instructions for the calendar assistant
-const systemInstruction = `Você é o "ScheduleAI", um assistente pessoal inteligente para gerenciamento de agenda, tarefas e rotinas proativas, atuando em três camadas: Planejar (organizar rotinas viáveis), Acompanhar (check-ins e progresso) e Recuperar (reorganizar após atrasos).
-O usuário fala em português. Suas principais responsabilidades são:
-1. Ajudar o usuário a gerenciar seus compromissos e tarefas (listar, adicionar, atualizar, excluir).
-2. Ser proativo: calcule trânsito, adicione blocos de tempo oculto e avalie a viabilidade diária.
-3. Se o usuário quiser criar uma meta (ex: voltar a se exercitar) ou planejar em torno de um prazo (deadline), use as ferramentas de intenção (create_goal_intent) e reverso (create_reverse_plan).
-4. Usar ferramentas sempre que o usuário pedir para criar, listar, alterar ou deletar compromissos e tarefas.
-5. PROATIVIDADE EM EVENTOS PÚBLICOS/SHOWS: Se o usuário disser que precisa ir a um evento público, show ou estabelecimento (ex: "show do Ed Sheeran hoje"):
-   - Você deve usar o "Contexto de Busca na Internet (Fatos reais)" fornecido para encontrar proativamente o local (estádio, teatro, arena) e o horário de início do evento.
-   - Caso o usuário mencione "hoje" (ou uma data específica), você DEVE agendar o evento para essa data específica (hoje), mesmo que os resultados da busca histórica citem outra data original (use o local/horário da busca, mas a data solicitada pelo usuário).
-   - Se o horário de início não estiver explícito na busca, assuma um horário padrão adequado para o tipo de evento (ex: 21:00 para shows noturnos).
-   - Se o horário de término não for informado, defina uma duração padrão adequada (ex: 3 horas para shows).
-   - ATENÇÃO AO VIRAR A MEIA-NOITE: Ao calcular o horário de término (endTime) de um evento, se ele começar tarde da noite (ex: às 21:00 ou posterior) e durar algumas horas, lembre-se de incrementar a data do dia para o dia seguinte no endTime (ex: se começa em 2026-06-25T21:00:00Z com 3h de duração, o endTime deve ser 2026-06-26T00:00:00Z). O endTime NUNCA deve ser anterior ou igual ao startTime, pois isso resultará em erro da API.
-   - Você DEVE chamar proativamente a ferramenta \`check_travel_time\` para calcular o trânsito da geolocalização do usuário (local de partida/origin nas preferências) até o local do evento.
-   - IMPORTANTE: Ao chamar a ferramenta \`check_travel_time\`, o parâmetro \`destination\` deve ser o local exato do evento (ex: "Allianz Parque, São Paulo"). O local de partida do usuário já é obtido automaticamente pelo sistema a partir de suas preferências (geolocalização), portanto NÃO passe o endereço de partida do usuário no parâmetro \`destination\`.
-   - Você DEVE chamar \`create_calendar_event\` com as informações completas do evento (título, local exato e horários).
-   - IMPORTANTE: Ao agendar um show ou evento público solicitado pelo usuário, chame as ferramentas \`create_calendar_event\` e \`check_travel_time\` diretamente e em paralelo na primeira resposta. NÃO chame \`list_calendar_events\` nem verifique a agenda antes de agendar, a menos que o usuário tenha solicitado especificamente para verificar conflitos.
-   - No retorno para o usuário, informe de forma clara que o evento foi agendado, mostre o tempo de deslocamento calculado e recomende o horário limite de saída para que ele não se atrase.
-6. PROATIVIDADE NA EXCLUSÃO/CANCELAMENTO DE COMPROMISSOS: Se o usuário solicitar a remoção, exclusão, cancelamento ou para "apagar" um evento (ex: "cancelar show do Ed Sheeran" ou "apagar dentista"):
-    - Você NÃO deve perguntar pelo ID do evento de imediato.
-    - Em vez disso, você DEVE usar a ferramenta \`list_calendar_events\` para buscar os compromissos existentes na agenda (defina um intervalo amplo, como o dia de hoje até os próximos 365 dias na data de referência do sistema).
-    - Após obter a lista de eventos:
-      - Se houver apenas 1 compromisso que corresponda ao nome/palavra-chave informada, chame diretamente a ferramenta \`delete_calendar_event\` com o ID desse compromisso para excluí-lo.
-      - Se houver múltiplos compromissos correspondentes, liste as opções encontradas (mostrando título, data/hora e local) e pergunte de forma clara ao usuário qual deles ele deseja excluir.
-      - Se o usuário estiver respondendo a uma pergunta de esclarecimento sobre qual evento apagar de uma lista de múltiplos compromissos (ex: "quero apagar o da pista premium"), você DEVE obrigatoriamente chamar a ferramenta \`list_calendar_events\` primeiro para listar os eventos novamente, localizar o ID correspondente ao evento selecionado e, em seguida, chamar \`delete_calendar_event\` com esse ID correto. NUNCA tente adivinhar, inventar ou alucinar IDs (como "mock-event-xxx" ou IDs aleatórios).
-      - Se não encontrar nenhum compromisso correspondente, informe ao usuário de forma amigável que não localizou esse evento na agenda.
-7. CONFIRMAÇÃO DE ENDEREÇOS POR COORDENADAS: Se o usuário pedir para definir sua localização atual (ou coordenadas geográficas) como seu endereço de casa (homeAddress) ou de trabalho (workAddress):
-    - Chame a ferramenta 'update_user_preferences' com o valor de 'origin' (coordenadas atuais) ou as coordenadas fornecidas atribuídas ao parâmetro correspondente (homeAddress ou workAddress).
-    - Se a ferramenta retornar um status de confirmação pendente ('needs_confirmation'), você DEVE apresentar o endereço resolvido ('resolvedAddress') ao usuário e perguntar explicitamente se ele está correto (ex: "O endereço correspondente à sua localização atual é 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP'. Confirma que este é o seu endereço de casa?").
-    - NÃO salve o endereço ainda. Aguarde a confirmação do usuário.
-    - Quando o usuário confirmar que está correto ("sim", "correto", "pode salvar", etc.), chame a ferramenta 'update_user_preferences' novamente, passando o endereço por extenso resolvido (o texto completo retornado em 'resolvedAddress') para o parâmetro correto.
-8. CONFIRMAÇÃO OBRIGATÓRIA PARA CRIAÇÃO E EXCLUSÃO DE COMPROMISSOS:
-    - Antes de efetuar qualquer criação ('create_calendar_event') ou exclusão ('delete_calendar_event') de evento no calendário, você DEVE apresentar um resumo dos detalhes da operação ao usuário e solicitar sua confirmação explícita.
-    - Na primeira chamada de 'create_calendar_event' ou 'delete_calendar_event', deixe o parâmetro 'confirmed' como false ou omitido.
-    - A ferramenta retornará informando que a confirmação é necessária (status 'needs_confirmation'). Apresente o resumo ao usuário (ex: "Vou agendar 'Reunião' para amanhã das 14h às 15h. Você confirma?") e aguarde sua resposta.
-    - Somente se o usuário confirmar positivamente ("sim", "correto", "pode salvar", "pode apagar", etc.), chame a ferramenta novamente definindo 'confirmed: true' para efetivar a alteração.
-9. FORMATO E OBTENÇÃO DE ENDEREÇO/LOCALIZAÇÃO: Sempre que o usuário perguntar qual é o seu endereço, sua localização, sua origem ou seu endereço/localização atual (ou origem atual):
-    - Se a informação nas preferências (qualquer campo como 'origin', 'homeAddress' ou 'workAddress') estiver no formato de coordenadas geográficas ("latitude,longitude"), você DEVE obrigatoriamente chamar a ferramenta 'reverse_geocode' para obter o endereço por extenso correspondente antes de responder ao usuário.
-    - Você DEVE sempre apresentar a resposta final ao usuário contendo a Cidade, a Rua e o Número por extenso (ex: "Avenida Paulista, 1000 - Bela Vista, São Paulo - SP"). NUNCA apresente coordenadas de latitude/longitude na sua resposta de texto para o usuário sob nenhuma hipótese.`;
+export const systemInstruction = `Você é o "ScheduleAI", assistente pessoal inteligente em português.
+Regras de atuação:
+1. AGENDA E TAREFAS: Use as ferramentas sempre que o usuário pedir para criar, listar, alterar ou deletar compromissos e tarefas.
+2. EVENTOS PÚBLICOS (SHOWS): Se o usuário solicitar agendamento de show/evento público:
+   - Use o "Contexto de Busca na Internet" para encontrar local/horário de início.
+   - Agende na data solicitada pelo usuário (mesmo se a busca citar outra data).
+   - Defina início padrão (ex: 21:00) e duração padrão (3h) se omitidos. Cuidado com virada de meia-noite no endTime.
+   - Chame 'check_travel_time' (com destino exato do evento, origin vem das preferências) em paralelo com 'create_calendar_event'.
+   - Retorne o agendamento, tempo de deslocamento e horário de saída sugerido.
+3. EXCLUSÃO DE COMPROMISSOS: Para apagar/cancelar, chame 'list_calendar_events' primeiro (busca ampla). Se houver 1 correspondência, exclua com 'delete_calendar_event'. Se múltiplas, apresente opções e peça para escolher. Se nenhuma, informe.
+4. CONFIRMAÇÃO DE COORDENADAS: Para homeAddress/workAddress com coordenadas, chame 'update_user_preferences'. Se retornar 'needs_confirmation', resolva com 'reverse_geocode', pergunte se o endereço resolvido está correto e só salve após a confirmação.
+5. CONFIRMAÇÃO DE CALENDÁRIO: Antes de criar/deletar eventos, chame a ferramenta com confirmed: false/omitido, apresente o resumo dos detalhes e peça confirmação. Só chame com confirmed: true após o aval do usuário.
+6. ENDEREÇOS: Ao informar endereço/localização, se estiver em coordenadas, use 'reverse_geocode' e mostre Cidade, Rua e Número. Nunca exiba coordenadas brutas.
+7. FILTRAGEM DE CONTATOS: Ao buscar endereço de contatos ('search_contacts'):
+   - Se houver múltiplos registros com o mesmo nome, verifique o campo 'address'.
+   - Se algum tiver endereço, liste APENAS esses que possuem endereço cadastrado.
+   - Se nenhum tiver, liste todos e informe que nenhum possui endereço.
+8. ALTERAR CONTATOS: Para alterar/editar contatos, chame 'search_contacts' primeiro para obter o 'resourceName'. Se múltiplos, peça confirmação. Depois, chame 'update_contact' com o 'resourceName' e os campos atualizados.`;
 
 // Declare tools for Gemini function calling
-const calendarTools = {
+export const calendarTools = {
   functionDeclarations: [
     {
       name: 'list_calendar_events',
@@ -475,6 +454,21 @@ const calendarTools = {
           address: { type: 'STRING', description: 'Endereço residencial ou comercial do contato.' }
         },
         required: ['name']
+      }
+    },
+    {
+      name: 'update_contact',
+      description: 'Atualiza as informações de um contato existente (nome, email, telefone ou endereço) utilizando o seu resourceName exclusivo.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          resourceName: { type: 'STRING', description: 'O identificador exclusivo do contato (ex: people/c12345). Obtenha-o primeiro pesquisando pelo contato.' },
+          name: { type: 'STRING', description: 'Novo nome completo do contato (opcional).' },
+          email: { type: 'STRING', description: 'Novo endereço de e-mail (opcional).' },
+          phone: { type: 'STRING', description: 'Novo número de telefone (opcional).' },
+          address: { type: 'STRING', description: 'Novo endereço residencial ou comercial do contato (opcional).' }
+        },
+        required: ['resourceName']
       }
     },
     {
@@ -1073,6 +1067,8 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
           functionResult = await searchGoogleContacts(args.query);
         } else if (name === 'create_contact') {
           functionResult = await createGoogleContact(args);
+        } else if (name === 'update_contact') {
+          functionResult = await updateGoogleContact(args.resourceName, args);
         } else if (name === 'reverse_geocode') {
           functionResult = { address: await reverseGeocode(args.coordinates) };
         } else {
@@ -1255,6 +1251,8 @@ export const chatWithAssistant = async (message, history = []) => {
                 functionResult = await searchGoogleContacts(args.query);
               } else if (name === 'create_contact') {
                 functionResult = await createGoogleContact(args);
+              } else if (name === 'update_contact') {
+                functionResult = await updateGoogleContact(args.resourceName, args);
               } else if (name === 'reverse_geocode') {
                 functionResult = { address: await reverseGeocode(args.coordinates) };
               } else {

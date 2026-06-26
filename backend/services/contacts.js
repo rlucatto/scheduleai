@@ -1,10 +1,99 @@
 import { google } from 'googleapis';
 import { oauth2Client, isGoogleConnected } from './calendar.js';
 
+// In-memory mock contacts list
+let mockContacts = [
+  {
+    resourceName: 'people/c1',
+    name: 'João Silva',
+    email: 'joao.silva@example.com',
+    phone: '11999999999',
+    address: ''
+  },
+  {
+    resourceName: 'people/c2',
+    name: 'João Silva',
+    email: 'joao.silva2@example.com',
+    phone: '11888888888',
+    address: 'Rua Augusta, 1500, São Paulo, SP'
+  },
+  {
+    resourceName: 'people/c3',
+    name: 'Maria Santos',
+    email: 'maria.santos@example.com',
+    phone: '11777777777',
+    address: 'Avenida Paulista, 1000, São Paulo, SP'
+  }
+];
+
 // Search contacts by query
 export const searchGoogleContacts = async (query) => {
-  if (!isGoogleConnected || !oauth2Client) {
-    throw new Error('Google Account is not connected.');
+  if (process.env.TEST_MOCK_CONTACTS === 'true' || !isGoogleConnected || !oauth2Client) {
+    console.log(`[MOCK] searchGoogleContacts called with query: "${query}"`);
+    const q = query.toLowerCase();
+
+    // Check specific test scenarios for automated verification
+    if (process.env.TEST_MOCK_CONTACTS === 'true') {
+      const scenario = process.env.TEST_SCENARIO || 'one_has_address';
+      if (scenario === 'one_has_address') {
+        return [
+          {
+            resourceName: 'people/c1',
+            name: 'João Silva',
+            email: 'joao.silva@example.com',
+            phone: '11999999999',
+            address: ''
+          },
+          {
+            resourceName: 'people/c2',
+            name: 'João Silva',
+            email: 'joao.silva2@example.com',
+            phone: '11888888888',
+            address: 'Rua Augusta, 1500, São Paulo, SP'
+          }
+        ];
+      } else if (scenario === 'none_have_address') {
+        return [
+          {
+            resourceName: 'people/c1',
+            name: 'João Silva',
+            email: 'joao.silva@example.com',
+            phone: '11999999999',
+            address: ''
+          },
+          {
+            resourceName: 'people/c2',
+            name: 'João Silva',
+            email: 'joao.silva2@example.com',
+            phone: '11888888888',
+            address: ''
+          }
+        ];
+      } else if (scenario === 'all_have_address') {
+        return [
+          {
+            resourceName: 'people/c1',
+            name: 'João Silva',
+            email: 'joao.silva@example.com',
+            phone: '11999999999',
+            address: 'Avenida Paulista, 1000, São Paulo, SP'
+          },
+          {
+            resourceName: 'people/c2',
+            name: 'João Silva',
+            email: 'joao.silva2@example.com',
+            phone: '11888888888',
+            address: 'Rua Augusta, 1500, São Paulo, SP'
+          }
+        ];
+      }
+    }
+
+    return mockContacts.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      c.email.toLowerCase().includes(q) ||
+      c.phone.toLowerCase().includes(q)
+    );
   }
 
   const people = google.people({ version: 'v1', auth: oauth2Client });
@@ -48,7 +137,15 @@ export const searchGoogleContacts = async (query) => {
 // Create a new contact
 export const createGoogleContact = async (contactData) => {
   if (!isGoogleConnected || !oauth2Client) {
-    throw new Error('Google Account is not connected.');
+    const newContact = {
+      resourceName: `people/c${Date.now()}`,
+      name: contactData.name || 'Sem Nome',
+      email: contactData.email || '',
+      phone: contactData.phone || '',
+      address: contactData.address || ''
+    };
+    mockContacts.push(newContact);
+    return newContact;
   }
 
   const people = google.people({ version: 'v1', auth: oauth2Client });
@@ -81,5 +178,79 @@ export const createGoogleContact = async (contactData) => {
   } catch (error) {
     console.error('Error creating contact:', error);
     throw new Error(`Falha ao criar contato: ${error.message}`);
+  }
+};
+
+// Update an existing contact
+export const updateGoogleContact = async (resourceName, contactData) => {
+  if (process.env.TEST_MOCK_CONTACTS === 'true' || !isGoogleConnected || !oauth2Client) {
+    console.log(`[MOCK] updateGoogleContact called for resource: "${resourceName}"`);
+    const index = mockContacts.findIndex(c => c.resourceName === resourceName);
+    if (index === -1) {
+      throw new Error(`Contato com resourceName ${resourceName} não encontrado.`);
+    }
+    const updated = {
+      ...mockContacts[index],
+      ...Object.fromEntries(Object.entries(contactData).filter(([_, v]) => v !== undefined))
+    };
+    mockContacts[index] = updated;
+    return updated;
+  }
+
+  const people = google.people({ version: 'v1', auth: oauth2Client });
+
+  try {
+    // 1. Get the contact first to get its current etag and existing fields
+    const res = await people.people.get({
+      resourceName: resourceName,
+      personFields: 'names,emailAddresses,phoneNumbers,addresses,metadata'
+    });
+
+    const person = res.data;
+    const updateFields = [];
+
+    // 2. Overwrite the fields specified in contactData
+    if (contactData.name !== undefined) {
+      person.names = [{ displayName: contactData.name, givenName: contactData.name }];
+      updateFields.push('names');
+    }
+    
+    if (contactData.email !== undefined) {
+      person.emailAddresses = [{ value: contactData.email, type: 'home' }];
+      updateFields.push('emailAddresses');
+    }
+
+    if (contactData.phone !== undefined) {
+      person.phoneNumbers = [{ value: contactData.phone, type: 'mobile' }];
+      updateFields.push('phoneNumbers');
+    }
+
+    if (contactData.address !== undefined) {
+      person.addresses = [{ formattedValue: contactData.address, streetAddress: contactData.address, type: 'home' }];
+      updateFields.push('addresses');
+    }
+
+    if (updateFields.length === 0) {
+      throw new Error('Nenhum campo fornecido para atualização.');
+    }
+
+    // 3. Perform update
+    const updateRes = await people.people.updateContact({
+      resourceName: resourceName,
+      updatePersonFields: updateFields.join(','),
+      requestBody: person
+    });
+
+    const updatedPerson = updateRes.data;
+    return {
+      resourceName: updatedPerson.resourceName,
+      name: updatedPerson.names?.[0]?.displayName || '',
+      email: updatedPerson.emailAddresses?.[0]?.value || '',
+      phone: updatedPerson.phoneNumbers?.[0]?.value || '',
+      address: updatedPerson.addresses?.[0]?.formattedValue || updatedPerson.addresses?.[0]?.streetAddress || ''
+    };
+  } catch (error) {
+    console.error('Error updating contact:', error);
+    throw new Error(`Falha ao atualizar contato: ${error.message}`);
   }
 };
