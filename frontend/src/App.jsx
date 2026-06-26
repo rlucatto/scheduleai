@@ -607,6 +607,18 @@ function App() {
     }
   };
 
+  const connectGoogleRedirect = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/auth/url`);
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      console.error('Error redirecting to Google account:', err);
+    }
+  };
+
   // Disconnect Google account
   const disconnectGoogle = async () => {
     try {
@@ -785,8 +797,8 @@ function App() {
       await fetchModelHealth();
 
       if (authStatus && !authStatus.isConnected && authStatus.isConfigured) {
-        console.log('[AUTO-CONNECT] User not connected. Automatically triggering Google Calendar connection...');
-        connectGoogle();
+        console.log('[AUTO-CONNECT] User not connected. Automatically redirecting to Google Calendar connection...');
+        connectGoogleRedirect();
       }
 
       // Check geolocation and save it as origin

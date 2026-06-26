@@ -81,7 +81,13 @@ app.get('/api/auth/callback', async (req, res) => {
   try {
     await handleAuthCode(code);
     io.emit('auth_change', { status: getAuthStatus(), preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
-    // Redirect back to frontend
+    
+    // Determine frontend URL dynamically (local vs production)
+    const host = req.headers.host || '';
+    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+    const frontendUrl = isLocal ? 'http://localhost:5173' : 'https://scheduleai-rlucatto.web.app';
+
+    // Redirect back or close popup
     res.send(`
       <html>
         <head><title>Autenticado</title></head>
@@ -89,9 +95,15 @@ app.get('/api/auth/callback', async (req, res) => {
           <div style="text-align: center; background: #202024; padding: 2rem; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5)">
             <h1 style="color: #4caf50; margin-bottom: 1rem;">Conectado com sucesso!</h1>
             <p>Sua agenda Google Calendar está conectada ao ScheduleAI.</p>
-            <p>Você pode fechar esta aba agora.</p>
+            <p id="sub-text">Você pode fechar esta aba agora.</p>
             <script>
-              setTimeout(() => { window.close(); }, 2000);
+              const isPopup = !!window.opener;
+              if (!isPopup) {
+                document.getElementById('sub-text').innerText = 'Redirecionando você de volta para o ScheduleAI...';
+                setTimeout(() => { window.location.href = "${frontendUrl}"; }, 2000);
+              } else {
+                setTimeout(() => { window.close(); }, 2000);
+              }
             </script>
           </div>
         </body>
