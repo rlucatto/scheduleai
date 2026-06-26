@@ -1036,6 +1036,18 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label>Tema da Interface</label>
+                <select 
+                  className="form-input"
+                  value={theme}
+                  onChange={e => setTheme(e.target.value)}
+                >
+                  <option value="dark">🌑 Escuro (Dark Mode)</option>
+                  <option value="light">☀️ Claro (Light Mode)</option>
+                </select>
+              </div>
+
+              <div className="form-group">
                 <label>Tempo de Preparação (minutos)</label>
                 <input 
                   type="number" 
