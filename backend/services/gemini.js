@@ -351,7 +351,12 @@ Regras de atuação:
 9. HOBBIES E RECOMENDAÇÃO DE ATIVIDADES:
    - Sempre que o usuário mencionar interesses, preferências, hobbies (ex: "gosto de shows de jazz", "meus hobbies são cinema e corrida", "curto praias e pubs") ou pedir para sugerir atividades, você DEVE identificar estes hobbies e atualizar as preferências chamando 'update_user_preferences' com o campo 'hobbies' contendo a lista atualizada de hobbies.
    - Quando o usuário pedir recomendações ou perguntar o que fazer (ex: "o que fazer em São Paulo no final de semana?", "me indique um pub", "o que tem de bom acontecendo na cidade?"), você DEVE usar a busca na internet para encontrar atividades locais condizentes com os hobbies dele ou que estejam trending na cidade configurada em 'origin' (ex: São Paulo, Chicago), incluindo também cidades vizinhas em um raio de até 50 milhas (80 km) de distância.
-   - As sugestões devem conter endereços clicáveis em formato de link markdown direcionando para o GPS, conforme a regra 6.`;
+   - As sugestões devem conter endereços clicáveis em formato de link markdown direcionando para o GPS, conforme a regra 6.
+10. ANIVERSÁRIOS:
+    - Se o usuário disser que deseja que você se lembre/monitore o aniversário de alguém (ex: "lembre do aniversário da minha irmã Maria dia 15/10", "adicione o aniversário de João Silva como 27/06"), você DEVE:
+      1. Buscar o contato com 'search_contacts'. Se encontrado, atualizar o aniversário usando 'update_contact' com o parâmetro 'birthday' formatado como 'YYYY-MM-DD' ou 'MM-DD'. Se não encontrado, criar o contato usando 'create_contact' definindo o aniversário correspondente.
+      2. Adicionar o nome do contato à preferência 'birthdayAlerts' chamando 'update_user_preferences' para habilitar o monitoramento e alertas automáticos proativos.
+    - Se o usuário perguntar por aniversários (ex: "quais aniversários você lembra?", "quem está cadastrado para aniversários?"), informe a lista de pessoas monitoradas atualmente em 'birthdayAlerts' e os dados de aniversário dos contatos correspondentes obtidos via busca.`;
 
 // Declare tools for Gemini function calling
 export const calendarTools = {
@@ -495,7 +500,8 @@ export const calendarTools = {
           leadTimeMinutes: { type: 'NUMBER', description: 'Tempo de alerta de saída em minutos.' },
           advanceArrivalMinutes: { type: 'NUMBER', description: 'Tempo de antecedência de chegada em minutos.' },
           modelPriority: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Lista priorizada de modelos do Gemini em ordem de preferência.' },
-          hobbies: { type: 'STRING', description: 'Lista de hobbies/interesses do usuário separados por vírgula (ex: "jogos, concertos, live music, filmes, club, pub, esportes, restaurantes, tv show, series, water parques, praia, eventos").' }
+          hobbies: { type: 'STRING', description: 'Lista de hobbies/interesses do usuário separados por vírgula (ex: "jogos, concertos, live music, filmes, club, pub, esportes, restaurantes, tv show, series, water parques, praia, eventos").' },
+          birthdayAlerts: { type: 'STRING', description: 'Nomes de contatos cujos aniversários o assistente deve monitorar, separados por vírgula (ex: "João Silva, Maria Santos").' }
         }
       }
     },
@@ -512,21 +518,22 @@ export const calendarTools = {
     },
     {
       name: 'create_contact',
-      description: 'Cria um novo contato no Google Contacts do usuário com nome, email, telefone e endereço comercial ou residencial.',
+      description: 'Cria um novo contato no Google Contacts do usuário com nome, email, telefone, endereço comercial ou residencial, e aniversário.',
       parameters: {
         type: 'OBJECT',
         properties: {
           name: { type: 'STRING', description: 'Nome completo do contato.' },
           email: { type: 'STRING', description: 'Endereço de e-mail.' },
           phone: { type: 'STRING', description: 'Número de telefone.' },
-          address: { type: 'STRING', description: 'Endereço residencial ou comercial do contato.' }
+          address: { type: 'STRING', description: 'Endereço residencial ou comercial do contato.' },
+          birthday: { type: 'STRING', description: 'Data de aniversário do contato no formato YYYY-MM-DD ou MM-DD (opcional).' }
         },
         required: ['name']
       }
     },
     {
       name: 'update_contact',
-      description: 'Atualiza as informações de um contato existente (nome, email, telefone ou endereço) utilizando o seu resourceName exclusivo.',
+      description: 'Atualiza as informações de um contato existente (nome, email, telefone, endereço ou aniversário) utilizando o seu resourceName exclusivo.',
       parameters: {
         type: 'OBJECT',
         properties: {
@@ -534,7 +541,8 @@ export const calendarTools = {
           name: { type: 'STRING', description: 'Novo nome completo do contato (opcional).' },
           email: { type: 'STRING', description: 'Novo endereço de e-mail (opcional).' },
           phone: { type: 'STRING', description: 'Novo número de telefone (opcional).' },
-          address: { type: 'STRING', description: 'Novo endereço residencial ou comercial do contato (opcional).' }
+          address: { type: 'STRING', description: 'Novo endereço residencial ou comercial do contato (opcional).' },
+          birthday: { type: 'STRING', description: 'Nova data de aniversário do contato no formato YYYY-MM-DD ou MM-DD (opcional).' }
         },
         required: ['resourceName']
       }

@@ -8,28 +8,32 @@ let mockContacts = [
     name: 'João Silva',
     email: 'joao.silva@example.com',
     phone: '11999999999',
-    address: ''
+    address: '',
+    birthday: ''
   },
   {
     resourceName: 'people/c2',
     name: 'João Silva',
     email: 'joao.silva2@example.com',
     phone: '11888888888',
-    address: 'Rua Augusta, 1500, São Paulo, SP'
+    address: 'Rua Augusta, 1500, São Paulo, SP',
+    birthday: '1995-10-15'
   },
   {
     resourceName: 'people/c3',
     name: 'Maria Santos',
     email: 'maria.santos@example.com',
     phone: '11777777777',
-    address: 'Avenida Paulista, 1000, São Paulo, SP'
+    address: 'Avenida Paulista, 1000, São Paulo, SP',
+    birthday: '1990-06-27'
   },
   {
     resourceName: 'people/shiva1',
     name: 'Shiva',
     email: 'shiva@example.com',
     phone: '11977776666',
-    address: 'Rua Augusta, 1200, São Paulo, SP'
+    address: 'Rua Augusta, 1200, São Paulo, SP',
+    birthday: ''
   }
 ];
 
@@ -135,7 +139,7 @@ export const searchGoogleContacts = async (query) => {
 
     const res = await people.people.searchContacts({
       query: query,
-      readMask: 'names,emailAddresses,phoneNumbers,addresses',
+      readMask: 'names,emailAddresses,phoneNumbers,addresses,birthdays',
       pageSize: 10
     });
 
@@ -147,12 +151,23 @@ export const searchGoogleContacts = async (query) => {
       const email = person.emailAddresses?.[0]?.value || '';
       const phone = person.phoneNumbers?.[0]?.value || '';
       const address = person.addresses?.[0]?.formattedValue || person.addresses?.[0]?.streetAddress || '';
+      
+      const bdayObj = person.birthdays?.[0]?.date;
+      let birthday = '';
+      if (bdayObj) {
+        const year = bdayObj.year || '';
+        const month = String(bdayObj.month).padStart(2, '0');
+        const day = String(bdayObj.day).padStart(2, '0');
+        birthday = year ? `${year}-${month}-${day}` : `${month}-${day}`;
+      }
+
       return {
         resourceName: person.resourceName,
         name,
         email,
         phone,
-        address
+        address,
+        birthday
       };
     });
   } catch (error) {
@@ -169,7 +184,8 @@ export const createGoogleContact = async (contactData) => {
       name: contactData.name || 'Sem Nome',
       email: contactData.email || '',
       phone: contactData.phone || '',
-      address: contactData.address || ''
+      address: contactData.address || '',
+      birthday: contactData.birthday || ''
     };
     mockContacts.push(newContact);
     return newContact;
@@ -177,12 +193,22 @@ export const createGoogleContact = async (contactData) => {
 
   const people = google.people({ version: 'v1', auth: oauth2Client });
 
-  const { name, email, phone, address } = contactData;
+  const { name, email, phone, address, birthday } = contactData;
 
   const names = name ? [{ displayName: name, givenName: name }] : [];
   const emailAddresses = email ? [{ value: email, type: 'home' }] : [];
   const phoneNumbers = phone ? [{ value: phone, type: 'mobile' }] : [];
   const addresses = address ? [{ formattedValue: address, streetAddress: address, type: 'home' }] : [];
+
+  const birthdays = [];
+  if (birthday) {
+    const parts = birthday.split('-');
+    if (parts.length === 3) {
+      birthdays.push({ date: { year: parseInt(parts[0]), month: parseInt(parts[1]), day: parseInt(parts[2]) } });
+    } else if (parts.length === 2) {
+      birthdays.push({ date: { month: parseInt(parts[0]), day: parseInt(parts[1]) } });
+    }
+  }
 
   try {
     const res = await people.people.createContact({
@@ -190,17 +216,28 @@ export const createGoogleContact = async (contactData) => {
         names,
         emailAddresses,
         phoneNumbers,
-        addresses
+        addresses,
+        birthdays
       }
     });
 
     const person = res.data;
+    const bdayObj = person.birthdays?.[0]?.date;
+    let bdayStr = '';
+    if (bdayObj) {
+      const year = bdayObj.year || '';
+      const month = String(bdayObj.month).padStart(2, '0');
+      const day = String(bdayObj.day).padStart(2, '0');
+      bdayStr = year ? `${year}-${month}-${day}` : `${month}-${day}`;
+    }
+
     return {
       resourceName: person.resourceName,
       name: person.names?.[0]?.displayName || name,
       email: person.emailAddresses?.[0]?.value || '',
       phone: person.phoneNumbers?.[0]?.value || '',
-      address: person.addresses?.[0]?.formattedValue || person.addresses?.[0]?.streetAddress || ''
+      address: person.addresses?.[0]?.formattedValue || person.addresses?.[0]?.streetAddress || '',
+      birthday: bdayStr
     };
   } catch (error) {
     console.error('Error creating contact:', error);
@@ -230,7 +267,7 @@ export const updateGoogleContact = async (resourceName, contactData) => {
     // 1. Get the contact first to get its current etag and existing fields
     const res = await people.people.get({
       resourceName: resourceName,
-      personFields: 'names,emailAddresses,phoneNumbers,addresses,metadata'
+      personFields: 'names,emailAddresses,phoneNumbers,addresses,metadata,birthdays'
     });
 
     const person = res.data;
@@ -257,6 +294,20 @@ export const updateGoogleContact = async (resourceName, contactData) => {
       updateFields.push('addresses');
     }
 
+    if (contactData.birthday !== undefined) {
+      if (contactData.birthday) {
+        const parts = contactData.birthday.split('-');
+        if (parts.length === 3) {
+          person.birthdays = [{ date: { year: parseInt(parts[0]), month: parseInt(parts[1]), day: parseInt(parts[2]) } }];
+        } else if (parts.length === 2) {
+          person.birthdays = [{ date: { month: parseInt(parts[0]), day: parseInt(parts[1]) } }];
+        }
+      } else {
+        person.birthdays = [];
+      }
+      updateFields.push('birthdays');
+    }
+
     if (updateFields.length === 0) {
       throw new Error('Nenhum campo fornecido para atualização.');
     }
@@ -269,12 +320,22 @@ export const updateGoogleContact = async (resourceName, contactData) => {
     });
 
     const updatedPerson = updateRes.data;
+    const bdayObj = updatedPerson.birthdays?.[0]?.date;
+    let bdayStr = '';
+    if (bdayObj) {
+      const year = bdayObj.year || '';
+      const month = String(bdayObj.month).padStart(2, '0');
+      const day = String(bdayObj.day).padStart(2, '0');
+      bdayStr = year ? `${year}-${month}-${day}` : `${month}-${day}`;
+    }
+
     return {
       resourceName: updatedPerson.resourceName,
       name: updatedPerson.names?.[0]?.displayName || '',
       email: updatedPerson.emailAddresses?.[0]?.value || '',
       phone: updatedPerson.phoneNumbers?.[0]?.value || '',
-      address: updatedPerson.addresses?.[0]?.formattedValue || updatedPerson.addresses?.[0]?.streetAddress || ''
+      address: updatedPerson.addresses?.[0]?.formattedValue || updatedPerson.addresses?.[0]?.streetAddress || '',
+      birthday: bdayStr
     };
   } catch (error) {
     console.error('Error updating contact:', error);

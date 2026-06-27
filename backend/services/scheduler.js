@@ -16,7 +16,8 @@ let userPreferences = {
   modelPriority: ['gemini-2.5-flash', 'gemini-2.0-flash'], // priority list of models
   ttsMode: 'gemini', // tts mode: gemini or browser
   ttsVoice: 'Puck', // TTS voice preference
-  hobbies: 'jogos, concertos, filmes, restaurantes'
+  hobbies: 'jogos, concertos, filmes, restaurantes',
+  birthdayAlerts: ''
 };
 
 // Store fired notifications to prevent duplicates
@@ -81,6 +82,9 @@ export const calculateEventTriggers = async (event, origin, mode) => {
 // Process events and push notifications if thresholds are met
 const checkUpcomingEvents = async () => {
   try {
+    // Run birthday check
+    await checkBirthdays();
+
     const now = new Date();
     // Check events starting in the next 12 hours
     const timeMin = now.toISOString();
@@ -139,13 +143,71 @@ const checkUpcomingEvents = async () => {
   }
 };
 
+let lastBirthdayCheckHour = -1;
+
+export const checkBirthdays = async (forceDate = null) => {
+  try {
+    const now = forceDate || new Date();
+    const currentHour = now.getHours();
+    
+    // Only check once per hour unless forced in tests
+    if (!forceDate && currentHour === lastBirthdayCheckHour) return;
+    if (!forceDate) lastBirthdayCheckHour = currentHour;
+
+    const prefs = getPreferences();
+    if (!prefs.birthdayAlerts) return;
+
+    const monitoredNames = prefs.birthdayAlerts.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+    if (monitoredNames.length === 0) return;
+
+    const { searchGoogleContacts } = await import('./contacts.js');
+    
+    for (const name of monitoredNames) {
+      const contacts = await searchGoogleContacts(name);
+      if (!contacts || contacts.length === 0) continue;
+
+      // Find direct matches (case-insensitive name match)
+      const match = contacts.find(c => c.name.toLowerCase() === name);
+      if (match && match.birthday) {
+        // Parse birthday (YYYY-MM-DD or MM-DD)
+        const bdayParts = match.birthday.split('-');
+        let bdayMonth, bdayDay;
+        if (bdayParts.length === 3) {
+          bdayMonth = parseInt(bdayParts[1]);
+          bdayDay = parseInt(bdayParts[2]);
+        } else if (bdayParts.length === 2) {
+          bdayMonth = parseInt(bdayParts[0]);
+          bdayDay = parseInt(bdayParts[1]);
+        }
+
+        const todayMonth = now.getMonth() + 1; // Month is 0-indexed
+        const todayDay = now.getDate();
+
+        if (todayMonth === bdayMonth && todayDay === bdayDay) {
+          const fireKey = `bday-${match.resourceName}-${now.getFullYear()}`;
+          if (!firedNotifications.has(fireKey)) {
+            firedNotifications.add(fireKey);
+            sendNotification('birthday', {
+              resourceName: match.resourceName,
+              summary: match.name,
+              message: `🎉 Hoje é o aniversário de ${match.name}! Que tal mandar uma mensagem ou dar os parabéns?`
+            });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[SCHEDULER] Error in checkBirthdays:', error.message);
+  }
+};
+
 const sendNotification = (type, data) => {
   console.log(`[SCHEDULER NOTIFICATION] [${type.toUpperCase()}] ${data.message}`);
   if (ioInstance) {
     ioInstance.emit('notification', {
       id: `notification-${Date.now()}`,
       type,
-      title: type === 'get-ready' ? 'Hora de se arrumar! 🧥' : type === 'leave-warning' ? 'Prepare-se para sair! 🚗' : 'Hora de Partir! 🚀',
+      title: type === 'get-ready' ? 'Hora de se arrumar! 🧥' : type === 'leave-warning' ? 'Prepare-se para sair! 🚗' : type === 'birthday' ? 'Aniversário! 🎂' : 'Hora de Partir! 🚀',
       message: data.message,
       data,
       timestamp: new Date().toISOString()

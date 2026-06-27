@@ -25,7 +25,8 @@ import {
   Mic,
   Volume2,
   VolumeX,
-  Heart
+  Heart,
+  Gift
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -156,7 +157,8 @@ function App() {
     advanceArrivalMinutes: 15,
     ttsMode: 'gemini',
     ttsVoice: 'Puck',
-    hobbies: ''
+    hobbies: '',
+    birthdayAlerts: ''
   });
   
   const [calculations, setCalculations] = useState([]);
@@ -1171,6 +1173,17 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label>Alertas de Aniversário (nomes separados por vírgula)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={preferences.birthdayAlerts || ''} 
+                  onChange={e => setPreferences({...preferences, birthdayAlerts: e.target.value})}
+                  placeholder="ex: João Silva, Maria Santos"
+                />
+              </div>
+
+              <div className="form-group">
                 <label>Tempo de Preparação (minutos)</label>
                 <input 
                   type="number" 
@@ -1368,6 +1381,13 @@ function App() {
                 <div>
                   <span style={{ color: 'var(--text-secondary)' }}>Hobbies: </span>
                   <strong>{preferences.hobbies || 'Nenhum'}</strong>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Gift size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Aniversários: </span>
+                  <strong>{preferences.birthdayAlerts || 'Nenhum'}</strong>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
