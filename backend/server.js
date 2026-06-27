@@ -223,6 +223,55 @@ app.post('/api/assistant/chat', async (req, res) => {
   res.json(response);
 });
 
+app.get('/api/assistant/proactive-greeting', async (req, res) => {
+  try {
+    const prefs = getPreferences();
+    const city = prefs.origin || 'São Paulo';
+    const cleanCity = city.split(',')[0].trim();
+    const hobbies = prefs.hobbies || '';
+    const birthdayAlerts = prefs.birthdayAlerts || '';
+
+    // Dynamically import searching functions
+    const { getSearchGroundingContext, executeWithFallback } = await import('./services/gemini.js');
+    
+    // Search for trending events in user's city
+    console.log(`[PROACTIVE GREETING] Grounding events search for city: ${cleanCity}...`);
+    const searchContext = await getSearchGroundingContext(`trending events and popular activities in ${cleanCity}`);
+
+    const response = await executeWithFallback(async (genAIInstance, modelName) => {
+      const model = genAIInstance.getGenerativeModel({ model: modelName });
+      const prompt = `Você é o ScheduleAI, um assistente de agenda e tarefas inteligente, atencioso e amigável.
+Gere uma saudação inicial personalizada e proativa para a tela de chat do usuário.
+Suas preferências atuais são:
+- Hobbies cadastrados: "${hobbies}"
+- Localização/Origem: "${city}"
+- Monitoramento de Aniversários: "${birthdayAlerts}"
+Hoje é dia ${new Date().toLocaleDateString('pt-BR')}.
+
+Informações de trending events na região de ${cleanCity} encontradas na busca (com endereços e detalhes):
+${searchContext || 'Nenhum evento encontrado.'}
+
+Sua tarefa:
+Gere uma saudação curta (2 a 4 frases no máximo) com um tom amigável.
+Você deve escolher UMA das seguintes abordagens proativas:
+1. Fazer perguntas pessoais simpáticas e interessantes para conhecer melhor os hobbies e preferências dele (ex: quais esportes ele pratica, se gosta de concertos, praias, restaurantes, pubs, séries, etc.) para que você possa auxiliá-lo a gerenciar o tempo de forma alinhada aos seus interesses.
+2. Sugerir 1 ou 2 eventos locais ou trending na região de ${cleanCity} ou arredores (até 50 milhas de distância) que combinem com os gostos dele ou que estejam bombando, incluindo links de mapas do Google Maps se houver endereço físico, usando o formato de link markdown [Endereço](URL) conforme as diretrizes do sistema.
+
+Responda APENAS com o texto da saudação direta para o chat (em formato Markdown de texto, sem metadados, wraps ou aspas).`;
+
+      const genRes = await model.generateContent(prompt);
+      return { text: genRes.response.text() };
+    }, null, "generate proactive greeting");
+
+    res.json({ text: response.text });
+  } catch (error) {
+    console.error('[PROACTIVE GREETING] Error generating greeting:', error);
+    res.json({
+      text: 'Olá! Como está o seu dia? Quais são os seus hobbies preferidos ou o que gostaria de planejar hoje? Posso também te sugerir os eventos mais badalados na sua região!'
+    });
+  }
+});
+
 app.post('/api/assistant/tts', async (req, res) => {
   const { text, voice } = req.body;
   if (!text) {
