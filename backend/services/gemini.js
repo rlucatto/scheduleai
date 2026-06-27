@@ -350,7 +350,7 @@ Regras de atuação:
 8. ALTERAR CONTATOS: Para alterar/editar contatos, chame 'search_contacts' primeiro para obter o 'resourceName'. Se múltiplos, peça confirmação. Depois, chame 'update_contact' com o 'resourceName' e os campos atualizados.
 9. HOBBIES E RECOMENDAÇÃO DE ATIVIDADES:
    - Sempre que o usuário mencionar interesses, preferências, hobbies (ex: "gosto de shows de jazz", "meus hobbies são cinema e corrida", "curto praias e pubs") ou pedir para sugerir atividades, você DEVE identificar estes hobbies e atualizar as preferências chamando 'update_user_preferences' com o campo 'hobbies' contendo a lista atualizada de hobbies.
-   - Quando o usuário pedir recomendações ou perguntar o que fazer (ex: "o que fazer em São Paulo no final de semana?", "me indique um pub", "o que tem de bom acontecendo na cidade?"), você DEVE usar a busca na internet para encontrar atividades locais condizentes com os hobbies dele ou que estejam trending na cidade configurada em 'origin' (ex: São Paulo, Chicago).
+   - Quando o usuário pedir recomendações ou perguntar o que fazer (ex: "o que fazer em São Paulo no final de semana?", "me indique um pub", "o que tem de bom acontecendo na cidade?"), você DEVE usar a busca na internet para encontrar atividades locais condizentes com os hobbies dele ou que estejam trending na cidade configurada em 'origin' (ex: São Paulo, Chicago), incluindo também cidades vizinhas em um raio de até 50 milhas (80 km) de distância.
    - As sugestões devem conter endereços clicáveis em formato de link markdown direcionando para o GPS, conforme a regra 6.`;
 
 // Declare tools for Gemini function calling
@@ -864,8 +864,8 @@ const getSearchGroundingContext = async (message) => {
             role: 'user',
             parts: [{
               text: `Você é um assistente de busca inteligente. Pesquise na internet por informações locais ou eventos de acordo com o pedido do usuário.
-              A localização/cidade de referência do usuário é: "${city}" (use esta cidade como foco para a busca se o pedido não especificar outra).
-              Os hobbies e interesses do usuário cadastrados são: "${hobbies}". Se o pedido for por recomendações gerais, sugestões de lazer ou o que fazer na cidade, priorize atividades relacionadas a estes hobbies ou o que estiver em alta (trending) na cidade de ${cleanCity}.
+              A localização/cidade de referência do usuário é: "${city}" (use esta cidade e cidades vizinhas em um raio de até 50 milhas de distância como foco para a busca se o pedido não especificar outra).
+              Os hobbies e interesses do usuário cadastrados são: "${hobbies}". Se o pedido for por recomendações gerais, sugestões de lazer ou o que fazer na região, priorize atividades relacionadas a estes hobbies ou o que estiver em alta (trending) na cidade de ${cleanCity} ou em cidades no entorno (até 50 milhas de distância).
               Hoje é dia ${new Date().toLocaleDateString('pt-BR')}.
               
               Se o pedido NÃO requerer busca na internet (por exemplo, "listar minha agenda", "criar tarefa estudar", "como está meu dia", "olá", "bom dia", etc.), responda APENAS com a palavra "NENHUMA".
@@ -898,12 +898,12 @@ const getSearchGroundingContext = async (message) => {
     const cleanedQuery = cleanSearchQuery(message);
     let finalSearchQuery = cleanedQuery;
     
-    // If it's asking for recommendations or what to do, target hobbies and city!
+    // If it's asking for recommendations or what to do, target hobbies, city and surrounding area!
     const isRecommendation = /recomenda|sugira|indica|o que fazer|trending|rolê|hobbies|hobby|atividades/i.test(message);
     if (isRecommendation) {
-      finalSearchQuery = `${cleanedQuery} ${hobbies} em ${cleanCity}`;
+      finalSearchQuery = `${cleanedQuery} ${hobbies} em ${cleanCity} e cidades vizinhas até 50 milhas`;
     } else if (!cleanedQuery.toLowerCase().includes(cleanCity.toLowerCase())) {
-      finalSearchQuery = `${cleanedQuery} em ${cleanCity}`;
+      finalSearchQuery = `${cleanedQuery} em ${cleanCity} e cidades vizinhas até 50 milhas`;
     }
 
     console.log(`[SEARCH GROUNDING] Executing local Yahoo search for: "${finalSearchQuery}"...`);
