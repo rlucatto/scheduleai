@@ -24,7 +24,8 @@ import {
   Settings,
   Mic,
   Volume2,
-  VolumeX
+  VolumeX,
+  Heart
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -154,7 +155,8 @@ function App() {
     leadTimeMinutes: 15,
     advanceArrivalMinutes: 15,
     ttsMode: 'gemini',
-    ttsVoice: 'Puck'
+    ttsVoice: 'Puck',
+    hobbies: ''
   });
   
   const [calculations, setCalculations] = useState([]);
@@ -1158,6 +1160,17 @@ function App() {
               </div>
 
               <div className="form-group">
+                <label>Hobbies & Interesses (separados por vírgula)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={preferences.hobbies || ''} 
+                  onChange={e => setPreferences({...preferences, hobbies: e.target.value})}
+                  placeholder="ex: jogos, shows, jazz, restaurantes, filmes"
+                />
+              </div>
+
+              <div className="form-group">
                 <label>Tempo de Preparação (minutos)</label>
                 <input 
                   type="number" 
@@ -1348,6 +1361,13 @@ function App() {
                 <div>
                   <span style={{ color: 'var(--text-secondary)' }}>Antecedência: </span>
                   <strong>{preferences.advanceArrivalMinutes || 15} mins</strong>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Heart size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
+                <div>
+                  <span style={{ color: 'var(--text-secondary)' }}>Hobbies: </span>
+                  <strong>{preferences.hobbies || 'Nenhum'}</strong>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>

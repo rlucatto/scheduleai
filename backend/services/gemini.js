@@ -85,7 +85,11 @@ const classifyRequest = (message = '') => {
     'tempo', 'previsão', 'clima', 'show', 'evento', 'notícia', 'quem é', 'onde fica', 
     'endereço do', 'telefone do', 'horário de funcionamento', 'quanto custa', 'ingressos', 
     'aberto hoje', 'shopping', 'restaurante', 'apagar', 'deletar', 'cancelar', 'remover', 'excluir',
-    'contato', 'contatos'
+    'contato', 'contatos', 'hobbies', 'hobby', 'gosto', 'gostos', 'indicar', 'indicação', 
+    'indique', 'recomendar', 'recomendação', 'recomende', 'sugerir', 'sugira', 'sugestão', 
+    'atividades', 'trending', 'cidade', 'rolê', 'rolê na cidade', 'oq fazer', 'o que fazer', 
+    'programação', 'concert', 'live music', 'filmes', 'club', 'pub', 'esportes', 
+    'tv show', 'series', 'water parque', 'praia'
   ];
   const needsSearch = searchKeywords.some(kw => msgLower.includes(kw));
 
@@ -343,7 +347,11 @@ Regras de atuação:
    - Se houver múltiplos registros com o mesmo nome, verifique o campo 'address'.
    - Se algum tiver endereço, liste APENAS esses que possuem endereço cadastrado.
    - Se nenhum tiver, liste todos e informe que nenhum possui endereço.
-8. ALTERAR CONTATOS: Para alterar/editar contatos, chame 'search_contacts' primeiro para obter o 'resourceName'. Se múltiplos, peça confirmação. Depois, chame 'update_contact' com o 'resourceName' e os campos atualizados.`;
+8. ALTERAR CONTATOS: Para alterar/editar contatos, chame 'search_contacts' primeiro para obter o 'resourceName'. Se múltiplos, peça confirmação. Depois, chame 'update_contact' com o 'resourceName' e os campos atualizados.
+9. HOBBIES E RECOMENDAÇÃO DE ATIVIDADES:
+   - Sempre que o usuário mencionar interesses, preferências, hobbies (ex: "gosto de shows de jazz", "meus hobbies são cinema e corrida", "curto praias e pubs") ou pedir para sugerir atividades, você DEVE identificar estes hobbies e atualizar as preferências chamando 'update_user_preferences' com o campo 'hobbies' contendo a lista atualizada de hobbies.
+   - Quando o usuário pedir recomendações ou perguntar o que fazer (ex: "o que fazer em São Paulo no final de semana?", "me indique um pub", "o que tem de bom acontecendo na cidade?"), você DEVE usar a busca na internet para encontrar atividades locais condizentes com os hobbies dele ou que estejam trending na cidade configurada em 'origin' (ex: São Paulo, Chicago).
+   - As sugestões devem conter endereços clicáveis em formato de link markdown direcionando para o GPS, conforme a regra 6.`;
 
 // Declare tools for Gemini function calling
 export const calendarTools = {
@@ -475,7 +483,7 @@ export const calendarTools = {
     },
     {
       name: 'update_user_preferences',
-      description: 'Atualiza as preferências do usuário, como o endereço residencial (homeAddress), o endereço de trabalho (workAddress), o ponto de partida (origin) ou configurações de tempos.',
+      description: 'Atualiza as preferências do usuário, como o endereço residencial (homeAddress), o endereço de trabalho (workAddress), o ponto de partida (origin), hobbies/interesses ou configurações de tempos.',
       parameters: {
         type: 'OBJECT',
         properties: {
@@ -486,7 +494,8 @@ export const calendarTools = {
           prepTimeMinutes: { type: 'NUMBER', description: 'Tempo de preparação em minutos.' },
           leadTimeMinutes: { type: 'NUMBER', description: 'Tempo de alerta de saída em minutos.' },
           advanceArrivalMinutes: { type: 'NUMBER', description: 'Tempo de antecedência de chegada em minutos.' },
-          modelPriority: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Lista priorizada de modelos do Gemini em ordem de preferência.' }
+          modelPriority: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Lista priorizada de modelos do Gemini em ordem de preferência.' },
+          hobbies: { type: 'STRING', description: 'Lista de hobbies/interesses do usuário separados por vírgula (ex: "jogos, concertos, live music, filmes, club, pub, esportes, restaurantes, tv show, series, water parques, praia, eventos").' }
         }
       }
     },
@@ -841,6 +850,11 @@ const getSearchGroundingContext = async (message) => {
       return '';
     }
 
+    const prefs = getPreferences();
+    const city = prefs.origin || 'São Paulo';
+    const cleanCity = city.split(',')[0].trim();
+    const hobbies = prefs.hobbies || '';
+
     const healthyKeysCount = keyPool.filter(k => k.blacklistedUntil < Date.now()).length;
     if (healthyKeysCount > 0) {
       const searchResult = await executeWithFallback(async (genAIInstance, modelName) => {
@@ -849,10 +863,13 @@ const getSearchGroundingContext = async (message) => {
           contents: [{
             role: 'user',
             parts: [{
-              text: `Você é um assistente de busca inteligente. Pesquise na internet por informações sobre o seguinte pedido do usuário caso ele se refira a um evento público com data/local específicos, show, estabelecimento ou informação atualizada que necessite de busca. Hoje é dia ${new Date().toLocaleDateString('pt-BR')}.
+              text: `Você é um assistente de busca inteligente. Pesquise na internet por informações locais ou eventos de acordo com o pedido do usuário.
+              A localização/cidade de referência do usuário é: "${city}" (use esta cidade como foco para a busca se o pedido não especificar outra).
+              Os hobbies e interesses do usuário cadastrados são: "${hobbies}". Se o pedido for por recomendações gerais, sugestões de lazer ou o que fazer na cidade, priorize atividades relacionadas a estes hobbies ou o que estiver em alta (trending) na cidade de ${cleanCity}.
+              Hoje é dia ${new Date().toLocaleDateString('pt-BR')}.
               
               Se o pedido NÃO requerer busca na internet (por exemplo, "listar minha agenda", "criar tarefa estudar", "como está meu dia", "olá", "bom dia", etc.), responda APENAS com a palavra "NENHUMA".
-              Caso contrário, retorne um resumo curto dos fatos encontrados (local, data, horário, endereço).
+              Caso contrário, retorne um resumo curto dos fatos ou atividades encontradas (nome, data/horário de funcionamento, endereço exato e links se disponíveis).
               
               Pedido do usuário: "${message}"`
             }]
@@ -873,8 +890,22 @@ const getSearchGroundingContext = async (message) => {
 
   // Local Yahoo Search Grounding Scraper Fallback
   try {
+    const prefs = getPreferences();
+    const city = prefs.origin || 'São Paulo';
+    const cleanCity = city.split(',')[0].trim();
+    const hobbies = prefs.hobbies || '';
+
     const cleanedQuery = cleanSearchQuery(message);
-    const finalSearchQuery = `${cleanedQuery} data local horário`;
+    let finalSearchQuery = cleanedQuery;
+    
+    // If it's asking for recommendations or what to do, target hobbies and city!
+    const isRecommendation = /recomenda|sugira|indica|o que fazer|trending|rolê|hobbies|hobby|atividades/i.test(message);
+    if (isRecommendation) {
+      finalSearchQuery = `${cleanedQuery} ${hobbies} em ${cleanCity}`;
+    } else if (!cleanedQuery.toLowerCase().includes(cleanCity.toLowerCase())) {
+      finalSearchQuery = `${cleanedQuery} em ${cleanCity}`;
+    }
+
     console.log(`[SEARCH GROUNDING] Executing local Yahoo search for: "${finalSearchQuery}"...`);
     const searchResults = await searchWeb(finalSearchQuery);
     if (!searchResults) {
