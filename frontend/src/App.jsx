@@ -26,7 +26,8 @@ import {
   Volume2,
   VolumeX,
   Heart,
-  Gift
+  Gift,
+  CheckSquare
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -183,6 +184,12 @@ function App() {
   const [canDrag, setCanDrag] = useState(false);
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [activeSecondTab, setActiveSecondTab] = useState('agenda');
+  const [tasks, setTasks] = useState([]);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [newTaskDeadline, setNewTaskDeadline] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState('medium');
+  const [newTaskEnergy, setNewTaskEnergy] = useState('medium');
   const [currentSpeakingText, setCurrentSpeakingText] = useState('');
 
   const chatEndRef = useRef(null);
@@ -625,6 +632,17 @@ function App() {
     }
   }, [preferences.modelPriority, localModels]);
 
+  // Fetch tasks
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/tasks`);
+      const data = await res.json();
+      setTasks(data);
+    } catch (err) {
+      console.error('Error fetching tasks:', err);
+    }
+  };
+
   // Fetch event calculations
   const fetchTimeline = async () => {
     setIsLoadingTimeline(true);
@@ -632,10 +650,66 @@ function App() {
       const res = await fetch(`${BACKEND_URL}/api/calendar/calculate`);
       const data = await res.json();
       setCalculations(data);
+      // Fetch tasks as well to keep them synchronized
+      await fetchTasks();
     } catch (err) {
       console.error('Error fetching timeline events:', err);
     } finally {
       setIsLoadingTimeline(false);
+    }
+  };
+
+  const handleCreateTask = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: newTaskTitle,
+          deadline: newTaskDeadline || undefined,
+          priority: newTaskPriority,
+          requiredEnergy: newTaskEnergy
+        })
+      });
+      if (res.ok) {
+        setNewTaskTitle('');
+        setNewTaskDeadline('');
+        setNewTaskPriority('medium');
+        setNewTaskEnergy('medium');
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error('Error creating task:', err);
+    }
+  };
+
+  const handleToggleTaskState = async (id, currentState) => {
+    try {
+      const newState = currentState === 'completed' ? 'planned' : 'completed';
+      const res = await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: newState })
+      });
+      if (res.ok) {
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error('Error toggling task:', err);
+    }
+  };
+
+  const handleDeleteTask = async (id) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/tasks/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchTasks();
+      }
+    } catch (err) {
+      console.error('Error deleting task:', err);
     }
   };
 
@@ -1644,85 +1718,234 @@ function App() {
   const renderTimeline = () => {
     return (
       <section className={`timeline-section ${isMobile ? 'mobile-tab-content' : ''}`}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Calendar size={20} style={{ color: 'var(--accent-primary)' }} />
-            <h2 style={isMobile ? { fontSize: '18px' } : undefined}>Cronograma da Agenda & Alertas de Trânsito</h2>
-          </div>
-          <button className="btn btn-secondary" style={{ padding: '8px' }} onClick={fetchTimeline} disabled={isLoadingTimeline}>
-            <RefreshCw size={16} className={isLoadingTimeline ? 'spin-anim' : ''} />
+        {/* Sub-Tabs Header */}
+        <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px', marginBottom: '16px' }}>
+          <button 
+            className={`btn-tab ${activeSecondTab === 'agenda' ? 'active' : ''}`}
+            onClick={() => setActiveSecondTab('agenda')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: activeSecondTab === 'agenda' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+              borderBottom: activeSecondTab === 'agenda' ? '2px solid var(--accent-hover)' : 'none',
+              paddingBottom: '6px',
+              fontWeight: '600',
+              fontSize: '15px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <Calendar size={18} />
+            Agenda
+          </button>
+          <button 
+            className={`btn-tab ${activeSecondTab === 'todo' ? 'active' : ''}`}
+            onClick={() => setActiveSecondTab('todo')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: activeSecondTab === 'todo' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+              borderBottom: activeSecondTab === 'todo' ? '2px solid var(--accent-hover)' : 'none',
+              paddingBottom: '6px',
+              fontWeight: '600',
+              fontSize: '15px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <CheckSquare size={18} />
+            Tarefas
           </button>
         </div>
 
-        <div className="timeline-grid">
-          {calculations.length === 0 ? (
-            <div className="card glass" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
-              <Calendar size={36} />
-              <span>Nenhum compromisso agendado para as próximas 12 horas.</span>
-              <span style={{ fontSize: '12px' }}>Use {isMobile ? 'a aba Conversa' : 'o chat assistente ao lado'} para agendar novos eventos!</span>
-            </div>
-          ) : (
-            calculations.map(calc => (
-              <div key={calc.eventId} className="card event-card has-triggers glass">
-                <div className="event-header">
-                  <span className="event-time">
-                    {formatDate(calc.eventStart)} - {formatTime(calc.eventStart)}
-                  </span>
-                  <button className="btn btn-secondary" style={{ padding: '4px', border: 'none', background: 'transparent' }} onClick={() => handleDeleteEvent(calc.eventId)}>
-                    <Trash2 size={15} style={{ color: 'var(--danger)' }} />
-                  </button>
-                </div>
-                
-                <div className="event-title">{calc.summary}</div>
-                
-                {calc.location && (
-                  <div className="event-location">
-                    <MapPin size={14} style={{ color: 'var(--accent-hover)' }} />
-                    <a 
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(calc.location)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: 'var(--accent-hover)', textDecoration: 'underline', fontWeight: '500', cursor: 'pointer' }}
-                    >
-                      {calc.location}
-                    </a>
-                  </div>
-                )}
-
-                {calc.location && calc.travelData && (
-                  <div className="trigger-indicator">
-                    <div className="trigger-step" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px', marginBottom: '4px' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Trânsito ({calc.travelData.distanceText}):</span>
-                      <span className="time" style={{ color: 'var(--accent-hover)' }}>{calc.travelData.durationText}</span>
-                    </div>
-                    
-                    <div className="trigger-step">
-                      <span>👔 Se Arrume (1h antes):</span>
-                      <span className="time">{formatTime(calc.getReadyTime)}</span>
-                    </div>
-                    
-                    <div className="trigger-step">
-                      <span>🔔 Aviso de Saída (15m antes):</span>
-                      <span className="time">{formatTime(calc.warnLeaveTime)}</span>
-                    </div>
-                    
-                    <div className="trigger-step" style={{ fontWeight: 'bold', color: 'var(--success)' }}>
-                      <span>🚗 Horário de Saída:</span>
-                      <span className="time">{formatTime(calc.departureTime)}</span>
-                    </div>
-                  </div>
-                )}
-
-                {!calc.location && (
-                  <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.01)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <Navigation size={12} style={{ flexShrink: 0, marginTop: '2px' }} />
-                    <span>Sem local cadastrado. Alertas de partida proativos estão desativados para este evento.</span>
-                  </div>
-                )}
+        {activeSecondTab === 'agenda' ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Calendar size={20} style={{ color: 'var(--accent-primary)' }} />
+                <h2 style={isMobile ? { fontSize: '18px' } : undefined}>Cronograma da Agenda & Alertas de Trânsito</h2>
               </div>
-            ))
-          )}
-        </div>
+              <button className="btn btn-secondary" style={{ padding: '8px' }} onClick={fetchTimeline} disabled={isLoadingTimeline}>
+                <RefreshCw size={16} className={isLoadingTimeline ? 'spin-anim' : ''} />
+              </button>
+            </div>
+
+            <div className="timeline-grid">
+              {calculations.length === 0 ? (
+                <div className="card glass" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
+                  <Calendar size={36} />
+                  <span>Nenhum compromisso agendado para as próximas 12 horas.</span>
+                  <span style={{ fontSize: '12px' }}>Use {isMobile ? 'a aba Conversa' : 'o chat assistente ao lado'} para agendar novos eventos!</span>
+                </div>
+              ) : (
+                calculations.map(calc => (
+                  <div key={calc.eventId} className="card event-card has-triggers glass">
+                    <div className="event-header">
+                      <span className="event-time">
+                        {formatDate(calc.eventStart)} - {formatTime(calc.eventStart)}
+                      </span>
+                      <button className="btn btn-secondary" style={{ padding: '4px', border: 'none', background: 'transparent' }} onClick={() => handleDeleteEvent(calc.eventId)}>
+                        <Trash2 size={15} style={{ color: 'var(--danger)' }} />
+                      </button>
+                    </div>
+                    
+                    <div className="event-title">{calc.summary}</div>
+                    
+                    {calc.location && (
+                      <div className="event-location">
+                        <MapPin size={14} style={{ color: 'var(--accent-hover)' }} />
+                        <a 
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(calc.location)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--accent-hover)', textDecoration: 'underline', fontWeight: '500', cursor: 'pointer' }}
+                        >
+                          {calc.location}
+                        </a>
+                      </div>
+                    )}
+
+                    {calc.location && calc.travelData && (
+                      <div className="trigger-indicator">
+                        <div className="trigger-step" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px', marginBottom: '4px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Trânsito ({calc.travelData.distanceText}):</span>
+                          <span className="time" style={{ color: 'var(--accent-hover)' }}>{calc.travelData.durationText}</span>
+                        </div>
+                        
+                        <div className="trigger-step">
+                          <span>👔 Se Arrume (1h antes):</span>
+                          <span className="time">{formatTime(calc.getReadyTime)}</span>
+                        </div>
+                        
+                        <div className="trigger-step">
+                          <span>🔔 Aviso de Saída (15m antes):</span>
+                          <span className="time">{formatTime(calc.warnLeaveTime)}</span>
+                        </div>
+                        
+                        <div className="trigger-step" style={{ fontWeight: 'bold', color: 'var(--success)' }}>
+                          <span>🚗 Horário de Saída:</span>
+                          <span className="time">{formatTime(calc.departureTime)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!calc.location && (
+                      <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.01)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <Navigation size={12} style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>Sem local cadastrado. Alertas de partida proativos estão desativados para este evento.</span>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <CheckSquare size={20} style={{ color: 'var(--accent-primary)' }} />
+                <h2 style={isMobile ? { fontSize: '18px' } : undefined}>Lista de Tarefas (To-Do List)</h2>
+              </div>
+              <button className="btn btn-secondary" style={{ padding: '8px' }} onClick={fetchTasks}>
+                <RefreshCw size={16} />
+              </button>
+            </div>
+
+            {/* Task Creation Form */}
+            <form onSubmit={handleCreateTask} className="card glass" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '14px', margin: 0, color: 'var(--text-primary)' }}>Nova Tarefa</h3>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  style={{ flex: 1, minWidth: '150px' }}
+                  value={newTaskTitle}
+                  onChange={e => setNewTaskTitle(e.target.value)}
+                  placeholder="Título da tarefa..."
+                  required
+                />
+                <input 
+                  type="date" 
+                  className="form-input" 
+                  value={newTaskDeadline}
+                  onChange={e => setNewTaskDeadline(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <select className="form-input" style={{ flex: 1 }} value={newTaskPriority} onChange={e => setNewTaskPriority(e.target.value)}>
+                  <option value="low">Prioridade: Baixa</option>
+                  <option value="medium">Prioridade: Média</option>
+                  <option value="high">Prioridade: Alta</option>
+                </select>
+                <select className="form-input" style={{ flex: 1 }} value={newTaskEnergy} onChange={e => setNewTaskEnergy(e.target.value)}>
+                  <option value="low">Energia: Baixa</option>
+                  <option value="medium">Energia: Média</option>
+                  <option value="high">Energia: Alta</option>
+                </select>
+                <button type="submit" className="btn btn-primary" style={{ padding: '8px 16px' }}>
+                  Adicionar
+                </button>
+              </div>
+            </form>
+
+            {/* Task List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {tasks.length === 0 ? (
+                <div className="card glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
+                  <CheckSquare size={36} />
+                  <span>Nenhuma tarefa cadastrada.</span>
+                  <span style={{ fontSize: '12px' }}>Crie uma acima ou peça ao chat assistente!</span>
+                </div>
+              ) : (
+                tasks.map(task => (
+                  <div key={task.id} className="card glass" style={{ borderLeft: `4px solid ${task.priority === 'high' ? 'var(--danger)' : task.priority === 'medium' ? 'var(--warning)' : 'var(--success)'}`, opacity: task.state === 'completed' ? 0.6 : 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={task.state === 'completed'} 
+                          onChange={() => handleToggleTaskState(task.id, task.state)}
+                          style={{ marginTop: '4px', transform: 'scale(1.2)', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: '600', textDecoration: task.state === 'completed' ? 'line-through' : 'none', color: 'var(--text-primary)' }}>
+                            {task.summary}
+                          </div>
+                          {task.description && (
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                              {task.description}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                            <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', fontSize: '10px' }}>
+                              {task.priority === 'high' ? '🔴 Alta' : task.priority === 'medium' ? '🟡 Média' : '🟢 Baixa'}
+                            </span>
+                            <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', fontSize: '10px' }}>
+                              ⚡ {task.requiredEnergy === 'high' ? 'Alta' : task.requiredEnergy === 'medium' ? 'Média' : 'Baixa'}
+                            </span>
+                            {task.deadline && (
+                              <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', fontSize: '10px', color: 'var(--accent-hover)' }}>
+                                📅 Prazo: {task.deadline.split('T')[0]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button className="btn btn-secondary" style={{ padding: '4px', border: 'none', background: 'transparent' }} onClick={() => handleDeleteTask(task.id)}>
+                        <Trash2 size={15} style={{ color: 'var(--danger)' }} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
       </section>
     );
   };
