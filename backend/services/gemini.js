@@ -82,16 +82,29 @@ const classifyRequest = (message = '') => {
   const msgLower = message.toLowerCase();
   
   const searchKeywords = [
-    'tempo', 'previsão', 'clima', 'show', 'evento', 'notícia', 'quem é', 'onde fica', 
+    'tempo', 'previsão', 'clima', 'show', 'evento', 'notícia', 'noticia', 'quem é', 'onde fica', 
     'endereço do', 'telefone do', 'horário de funcionamento', 'quanto custa', 'ingressos', 
     'aberto hoje', 'shopping', 'restaurante', 'apagar', 'deletar', 'cancelar', 'remover', 'excluir',
     'contato', 'contatos', 'hobbies', 'hobby', 'gosto', 'gostos', 'indicar', 'indicação', 
     'indique', 'recomendar', 'recomendação', 'recomende', 'sugerir', 'sugira', 'sugestão', 
     'atividades', 'trending', 'cidade', 'rolê', 'rolê na cidade', 'oq fazer', 'o que fazer', 
     'programação', 'concert', 'live music', 'filmes', 'club', 'pub', 'esportes', 
-    'tv show', 'series', 'water parque', 'praia'
+    'tv show', 'series', 'water parque', 'praia',
+    // Expanded search keywords for general search queries (sports, calendars, global/internet queries)
+    'f1', 'formula', 'fórmula', 'corrida', 'campeonato', 'calendário', 'calendario', 'tabela', 
+    'pesquise', 'pesquisa', 'busque', 'busca', 'google', 'internet', 'search', 'find', 'quem ganhou', 
+    'resultado', 'vencedor', 'notícias', 'noticias', 'feriado', 'feriados', 'agenda de', 'agenda das',
+    'onde vai ser', 'quando vai ser', 'horário de', 'horario de', 'programação de', 'programacao de'
   ];
-  const needsSearch = searchKeywords.some(kw => msgLower.includes(kw));
+  
+  let needsSearch = searchKeywords.some(kw => msgLower.includes(kw));
+
+  // Heuristic: If it asks a question with question words and is not a local calendar/task list command, trigger search!
+  const isQuestion = /\?|o que|como|quando|onde|por que|quem|qual|quais/i.test(msgLower);
+  const isLocalCommand = /listar|agenda|tarefa|preferência|fuso|transporte|meu dia|minha semana|meus compromissos/i.test(msgLower);
+  if (isQuestion && !isLocalCommand) {
+    needsSearch = true;
+  }
 
   // 2. Check if needs heavy reasoning/planning
   const reasoningKeywords = [
@@ -878,7 +891,7 @@ const getSearchGroundingContext = async (message) => {
             role: 'user',
             parts: [{
               text: `Você é um assistente de busca inteligente. Pesquise na internet por informações locais ou eventos de acordo com o pedido do usuário.
-              A localização/cidade de referência do usuário é: "${city}" (use esta cidade e cidades vizinhas em um raio de até 50 milhas de distância como foco para a busca se o pedido não especificar outra).
+              A localização/cidade de referência do usuário é: "${city}" (use esta cidade e cidades vizinhas em um raio de até 50 milhas de distância como foco para a busca se o pedido for por lazer local ou regional, mas para perguntas gerais, esportivas, globais ou se o pedido mencionar outra localidade, pesquise livremente na internet sem se limitar a essa cidade).
               Os hobbies e interesses do usuário cadastrados são: "${hobbies}". Se o pedido for por recomendações gerais, sugestões de lazer ou o que fazer na região, priorize atividades relacionadas a estes hobbies ou o que estiver em alta (trending) na cidade de ${cleanCity} ou em cidades no entorno (até 50 milhas de distância).
               Hoje é dia ${new Date().toLocaleDateString('pt-BR')}.
               
@@ -914,9 +927,11 @@ const getSearchGroundingContext = async (message) => {
     
     // If it's asking for recommendations or what to do, target hobbies, city and surrounding area!
     const isRecommendation = /recomenda|sugira|indica|o que fazer|trending|rolê|hobbies|hobby|atividades/i.test(message);
-    if (isRecommendation) {
+    const isLocal = /local|perto|próximo|cidade|região/i.test(message) || !/f1|formula|fórmula|corrida|campeonato|tabela|mundial|global|política|notícia/i.test(message);
+
+    if (isRecommendation && isLocal) {
       finalSearchQuery = `${cleanedQuery} ${hobbies} em ${cleanCity} e cidades vizinhas até 50 milhas`;
-    } else if (!cleanedQuery.toLowerCase().includes(cleanCity.toLowerCase())) {
+    } else if (isLocal && !cleanedQuery.toLowerCase().includes(cleanCity.toLowerCase())) {
       finalSearchQuery = `${cleanedQuery} em ${cleanCity} e cidades vizinhas até 50 milhas`;
     }
 
