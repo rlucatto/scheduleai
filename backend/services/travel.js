@@ -147,3 +147,96 @@ export const reverseGeocode = async (coords) => {
   // Realistic mock geocoding fallback for São Paulo (always includes street, number, neighborhood, city, state)
   return 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP';
 };
+
+const timezoneCache = new Map();
+
+export const geocodeAddress = async (address) => {
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!address) return null;
+
+  if (mapsKey && mapsKey !== 'your_google_maps_api_key_here') {
+    try {
+      const response = await axios.get(
+        'https://maps.googleapis.com/maps/api/geocode/json',
+        {
+          params: {
+            address: address.trim(),
+            key: mapsKey
+          }
+        }
+      );
+      if (response.data.status === 'OK' && response.data.results && response.data.results.length > 0) {
+        const loc = response.data.results[0].geometry.location;
+        return { lat: loc.lat, lng: loc.lng };
+      }
+    } catch (error) {
+      console.error('Error in geocoding address:', error.message);
+    }
+  }
+
+  // Mock fallback
+  const addrLower = address.toLowerCase();
+  if (addrLower.includes('chicago') || addrLower.includes('spaulding')) {
+    return { lat: 41.964, lng: -87.716 }; // Chicago spaulding coords
+  }
+  return { lat: -23.5616, lng: -46.6560 }; // São Paulo coords
+};
+
+export const getTimezoneFromCoords = async (coordsOrAddress) => {
+  if (!coordsOrAddress) return 'America/Sao_Paulo';
+
+  const cleanInput = coordsOrAddress.trim();
+  
+  // Check cache first
+  if (timezoneCache.has(cleanInput)) {
+    return timezoneCache.get(cleanInput);
+  }
+
+  const coordsRegex = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/;
+  let coords = cleanInput;
+
+  if (!coordsRegex.test(cleanInput)) {
+    // If it's an address, geocode it first
+    const latLng = await geocodeAddress(cleanInput);
+    if (!latLng) {
+      timezoneCache.set(cleanInput, 'America/Sao_Paulo');
+      return 'America/Sao_Paulo';
+    }
+    coords = `${latLng.lat},${latLng.lng}`;
+  }
+
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (mapsKey && mapsKey !== 'your_google_maps_api_key_here') {
+    try {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const response = await axios.get(
+        'https://maps.googleapis.com/maps/api/timezone/json',
+        {
+          params: {
+            location: coords,
+            timestamp,
+            key: mapsKey
+          }
+        }
+      );
+      if (response.data.status === 'OK' && response.data.timeZoneId) {
+        const tz = response.data.timeZoneId;
+        timezoneCache.set(cleanInput, tz);
+        return tz;
+      }
+    } catch (error) {
+      console.error('Error fetching timezone from Google API:', error.message);
+    }
+  }
+
+  // Fallback mocks
+  const lower = cleanInput.toLowerCase();
+  if (lower.includes('chicago') || lower.includes('spaulding') || coords.startsWith('41.9')) {
+    timezoneCache.set(cleanInput, 'America/Chicago');
+    return 'America/Chicago';
+  }
+
+  timezoneCache.set(cleanInput, 'America/Sao_Paulo');
+  return 'America/Sao_Paulo';
+};
+

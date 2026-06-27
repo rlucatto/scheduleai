@@ -267,17 +267,43 @@ const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, message = '
   throw new Error('Todos os modelos (locais e Gemini) falharam ou estão indisponíveis.');
 };
 
-export const getTimezoneString = () => {
-  const offsetMinutes = new Date().getTimezoneOffset();
-  const offsetSign = offsetMinutes > 0 ? '-' : '+';
-  const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
-  const offsetMins = Math.abs(offsetMinutes) % 60;
-  const formattedOffset = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
-  return `UTC${formattedOffset}`;
+export const getTimezoneString = (timeZone = 'America/Sao_Paulo') => {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset'
+    });
+    const parts = formatter.formatToParts(new Date());
+    const tzPart = parts.find(p => p.type === 'timeZoneName');
+    if (tzPart && tzPart.value) {
+      let val = tzPart.value.replace('GMT', 'UTC');
+      if (val === 'UTC') return 'UTC+00:00';
+      const match = val.match(/UTC([+-])(\d+)(?::(\d+))?/);
+      if (match) {
+        const sign = match[1];
+        const hours = match[2].padStart(2, '0');
+        const mins = (match[3] || '00').padStart(2, '0');
+        return `UTC${sign}${hours}:${mins}`;
+      }
+      return val;
+    }
+  } catch (err) {
+    console.error('Error formatting timezone string:', err.message);
+  }
+  return 'UTC-03:00';
 };
 
-export const enrichEventsWithLocalTime = (events) => {
+export const enrichEventsWithLocalTime = async (events) => {
   if (!Array.isArray(events)) return events;
+  
+  let userTz = 'America/Sao_Paulo';
+  try {
+    const { getTimezoneFromCoords } = await import('./travel.js');
+    userTz = await getTimezoneFromCoords(getPreferences().origin);
+  } catch (e) {
+    console.error('Error resolving timezone for events:', e.message);
+  }
+
   return events.map(e => {
     const startStr = e.start?.dateTime || e.start?.date;
     const endStr = e.end?.dateTime || e.end?.date;
@@ -287,8 +313,8 @@ export const enrichEventsWithLocalTime = (events) => {
       const d = new Date(isoStr);
       if (isNaN(d.getTime())) return isoStr;
       
-      const day = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const day = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: userTz });
+      const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: userTz });
       return `${day} às ${time}`;
     };
 
@@ -923,7 +949,10 @@ const deepConvertTypesToLowercase = (obj) => {
 
 const callOllama = async (modelName, message, history, searchResultsContext) => {
   const prefs = getPreferences();
-  const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR')} (Fuso Horário ${getTimezoneString()}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${getTimezoneString()}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+  const { getTimezoneFromCoords } = await import('./travel.js');
+  const userTz = await getTimezoneFromCoords(prefs.origin);
+  const tzString = getTimezoneString(userTz);
+  const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
   const systemPrompt = systemInstruction + currentRefDate + 
     `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
     (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '');
@@ -1029,7 +1058,7 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
       try {
         if (name === 'list_calendar_events') {
           const events = await listEvents(args.timeMin, args.timeMax);
-          functionResult = enrichEventsWithLocalTime(events);
+          functionResult = await enrichEventsWithLocalTime(events);
         } else if (name === 'create_calendar_event') {
           if (!args.confirmed) {
             const dateStr = formatDateTimePtBr(args.startTime);
@@ -1163,11 +1192,15 @@ export const chatWithAssistant = async (message, history = []) => {
     return await executeWithFallback(
       // Gemini Handler
       async (genAIInstance, modelName) => {
-        const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR')} (Fuso Horário ${getTimezoneString()}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${getTimezoneString()}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+        const prefs = getPreferences();
+        const { getTimezoneFromCoords } = await import('./travel.js');
+        const userTz = await getTimezoneFromCoords(prefs.origin);
+        const tzString = getTimezoneString(userTz);
+        const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
         const model = genAIInstance.getGenerativeModel({
           model: modelName,
           systemInstruction: systemInstruction + currentRefDate + 
-            `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(getPreferences(), null, 2) +
+            `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
             (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '')
         });
 
@@ -1214,7 +1247,7 @@ export const chatWithAssistant = async (message, history = []) => {
             try {
               if (name === 'list_calendar_events') {
                 const events = await listEvents(args.timeMin, args.timeMax);
-                functionResult = enrichEventsWithLocalTime(events);
+                functionResult = await enrichEventsWithLocalTime(events);
               } else if (name === 'create_calendar_event') {
                 if (!args.confirmed) {
                   const dateStr = formatDateTimePtBr(args.startTime);

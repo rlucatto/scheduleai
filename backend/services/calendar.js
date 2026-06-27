@@ -162,17 +162,29 @@ export const listEvents = async (timeMin, timeMax) => {
 };
 
 export const insertEvent = async (eventData) => {
+  // Resolve location timezone dynamically
+  let timeZone = 'America/Sao_Paulo';
+  try {
+    const { getPreferences } = await import('./scheduler.js');
+    const { getTimezoneFromCoords } = await import('./travel.js');
+    timeZone = await getTimezoneFromCoords(getPreferences().origin);
+    console.log(`[CALENDAR] Resolved timezone based on location/origin: ${timeZone}`);
+  } catch (tzErr) {
+    console.warn('[CALENDAR] Failed to resolve location timezone, using primary calendar fallback:', tzErr.message);
+  }
+
   if (isGoogleConnected && oauth2Client) {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
     
-    // Auto-discover primary calendar timezone if not already provided
-    let timeZone = 'America/Sao_Paulo';
-    try {
-      const calInfo = await calendar.calendars.get({ calendarId: 'primary' });
-      timeZone = calInfo.data.timeZone || 'America/Sao_Paulo';
-      console.log(`[CALENDAR] Auto-discovered calendar timezone: ${timeZone}`);
-    } catch (tzErr) {
-      console.warn('[CALENDAR] Failed to fetch calendar timezone, defaulting to America/Sao_Paulo:', tzErr.message);
+    // Fallback to primary calendar timezone if resolve failed and API is available
+    if (timeZone === 'America/Sao_Paulo') {
+      try {
+        const calInfo = await calendar.calendars.get({ calendarId: 'primary' });
+        timeZone = calInfo.data.timeZone || 'America/Sao_Paulo';
+        console.log(`[CALENDAR] Auto-discovered calendar timezone: ${timeZone}`);
+      } catch (tzErr) {
+        console.warn('[CALENDAR] Failed to fetch calendar timezone, defaulting to America/Sao_Paulo:', tzErr.message);
+      }
     }
 
     const finalEventData = {
@@ -198,8 +210,14 @@ export const insertEvent = async (eventData) => {
       summary: eventData.summary || 'Sem título',
       location: eventData.location || '',
       description: eventData.description || '',
-      start: eventData.start || { dateTime: new Date().toISOString() },
-      end: eventData.end || { dateTime: new Date(Date.now() + 3600000).toISOString() }
+      start: {
+        dateTime: eventData.start?.dateTime || new Date().toISOString(),
+        timeZone: eventData.start?.timeZone || timeZone
+      },
+      end: {
+        dateTime: eventData.end?.dateTime || new Date(Date.now() + 3600000).toISOString(),
+        timeZone: eventData.end?.timeZone || timeZone
+      }
     };
     mockEvents.push(newEvent);
     return newEvent;
@@ -225,17 +243,27 @@ export const deleteEvent = async (eventId) => {
 };
 
 export const updateEvent = async (eventId, updatedFields) => {
+  // Resolve location timezone dynamically
+  let timeZone = 'America/Sao_Paulo';
+  try {
+    const { getPreferences } = await import('./scheduler.js');
+    const { getTimezoneFromCoords } = await import('./travel.js');
+    timeZone = await getTimezoneFromCoords(getPreferences().origin);
+  } catch (tzErr) {
+    console.warn('[CALENDAR] Failed to resolve location timezone:', tzErr.message);
+  }
+
   if (isGoogleConnected && oauth2Client) {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
     
-    // Auto-discover primary calendar timezone
-    let timeZone = 'America/Sao_Paulo';
-    try {
-      const calInfo = await calendar.calendars.get({ calendarId: 'primary' });
-      timeZone = calInfo.data.timeZone || 'America/Sao_Paulo';
-      console.log(`[CALENDAR] Auto-discovered calendar timezone: ${timeZone}`);
-    } catch (tzErr) {
-      console.warn('[CALENDAR] Failed to fetch calendar timezone, defaulting to America/Sao_Paulo:', tzErr.message);
+    // Fallback to primary calendar timezone if resolve failed and API is available
+    if (timeZone === 'America/Sao_Paulo') {
+      try {
+        const calInfo = await calendar.calendars.get({ calendarId: 'primary' });
+        timeZone = calInfo.data.timeZone || 'America/Sao_Paulo';
+      } catch (tzErr) {
+        console.warn('[CALENDAR] Failed to fetch calendar timezone, defaulting to America/Sao_Paulo:', tzErr.message);
+      }
     }
 
     // First retrieve the existing event
@@ -273,8 +301,16 @@ export const updateEvent = async (eventId, updatedFields) => {
         ...mockEvents[index],
         ...updatedFields,
         // merge start and end if they are passed as partials
-        start: { ...mockEvents[index].start, ...updatedFields.start },
-        end: { ...mockEvents[index].end, ...updatedFields.end }
+        start: { 
+          ...mockEvents[index].start, 
+          ...updatedFields.start,
+          timeZone: updatedFields.start?.timeZone || mockEvents[index].start?.timeZone || timeZone 
+        },
+        end: { 
+          ...mockEvents[index].end, 
+          ...updatedFields.end,
+          timeZone: updatedFields.end?.timeZone || mockEvents[index].end?.timeZone || timeZone
+        }
       };
       return mockEvents[index];
     }
