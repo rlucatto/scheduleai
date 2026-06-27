@@ -84,6 +84,8 @@ const checkUpcomingEvents = async () => {
   try {
     // Run birthday check
     await checkBirthdays();
+    // Run task deadlines check
+    await checkTaskDeadlines();
 
     const now = new Date();
     // Check events starting in the next 12 hours
@@ -201,13 +203,70 @@ export const checkBirthdays = async (forceDate = null) => {
   }
 };
 
+let lastTaskDeadlineCheckHour = -1;
+
+export const checkTaskDeadlines = async (forceDate = null) => {
+  try {
+    const now = forceDate || new Date();
+    const currentHour = now.getHours();
+    
+    // Only check once per hour unless forced in tests
+    if (!forceDate && currentHour === lastTaskDeadlineCheckHour) return;
+    if (!forceDate) lastTaskDeadlineCheckHour = currentHour;
+
+    const { listTasks } = await import('./tasks.js');
+    const tasks = listTasks();
+    if (!tasks || tasks.length === 0) return;
+
+    // Format today as YYYY-MM-DD
+    const todayStr = now.toISOString().split('T')[0];
+    
+    // Format tomorrow as YYYY-MM-DD
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+    for (const task of tasks) {
+      if (task.state === 'completed' || task.state === 'done') continue;
+      if (!task.deadline) continue;
+
+      // Extract deadline date string (YYYY-MM-DD)
+      const taskDeadlineStr = task.deadline.split('T')[0];
+
+      if (taskDeadlineStr === todayStr) {
+        const fireKey = `task-today-${task.id}`;
+        if (!firedNotifications.has(fireKey)) {
+          firedNotifications.add(fireKey);
+          sendNotification('task-warning', {
+            taskId: task.id,
+            summary: task.summary,
+            message: `⚠️ Atenção: A tarefa importante "${task.summary}" vence HOJE! Evite atrasos.`
+          });
+        }
+      } else if (taskDeadlineStr === tomorrowStr) {
+        const fireKey = `task-tomorrow-${task.id}`;
+        if (!firedNotifications.has(fireKey)) {
+          firedNotifications.add(fireKey);
+          sendNotification('task-warning', {
+            taskId: task.id,
+            summary: task.summary,
+            message: `⏰ Lembrete: A tarefa "${task.summary}" vence amanhã (${tomorrowStr}). Planeje-se para concluí-la.`
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[SCHEDULER] Error in checkTaskDeadlines:', error.message);
+  }
+};
+
 const sendNotification = (type, data) => {
   console.log(`[SCHEDULER NOTIFICATION] [${type.toUpperCase()}] ${data.message}`);
   if (ioInstance) {
     ioInstance.emit('notification', {
       id: `notification-${Date.now()}`,
       type,
-      title: type === 'get-ready' ? 'Hora de se arrumar! 🧥' : type === 'leave-warning' ? 'Prepare-se para sair! 🚗' : type === 'birthday' ? 'Aniversário! 🎂' : 'Hora de Partir! 🚀',
+      title: type === 'get-ready' ? 'Hora de se arrumar! 🧥' : type === 'leave-warning' ? 'Prepare-se para sair! 🚗' : type === 'birthday' ? 'Aniversário! 🎂' : type === 'task-warning' ? 'Prazo de Tarefa! ⚠️' : 'Hora de Partir! 🚀',
       message: data.message,
       data,
       timestamp: new Date().toISOString()

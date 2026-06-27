@@ -356,7 +356,13 @@ Regras de atuação:
     - Se o usuário disser que deseja que você se lembre/monitore o aniversário de alguém (ex: "lembre do aniversário da minha irmã Maria dia 15/10", "adicione o aniversário de João Silva como 27/06"), você DEVE:
       1. Buscar o contato com 'search_contacts'. Se encontrado, atualizar o aniversário usando 'update_contact' com o parâmetro 'birthday' formatado como 'YYYY-MM-DD' ou 'MM-DD'. Se não encontrado, criar o contato usando 'create_contact' definindo o aniversário correspondente.
       2. Adicionar o nome do contato à preferência 'birthdayAlerts' chamando 'update_user_preferences' para habilitar o monitoramento e alertas automáticos proativos.
-    - Se o usuário perguntar por aniversários (ex: "quais aniversários você lembra?", "quem está cadastrado para aniversários?"), informe a lista de pessoas monitoradas atualmente em 'birthdayAlerts' e os dados de aniversário dos contatos correspondentes obtidos via busca.`;
+    - Se o usuário perguntar por aniversários (ex: "quais aniversários você lembra?", "quem está cadastrado para aniversários?"), informe a lista de pessoas monitoradas atualmente em 'birthdayAlerts' e os dados de aniversário dos contatos correspondentes obtidos via busca.
+11. GERENCIAMENTO PROATIVO DE TAREFAS E PRAZOS (GERENCIAR TEMPO):
+    - Sempre que o usuário solicitar o registro ou planejamento de uma tarefa pendente importante ou burocrática (ex: "renovar driver's license", "ir ao DMV", "renovar passaporte", "pagar imposto", "marcar consulta médica", etc.):
+      1. Identifique o prazo final real (ultimate deadline) se informado pelo usuário.
+      2. Defina PROATIVAMENTE um prazo de execução confortável (geralmente entre 15 a 30 dias antes do vencimento real, ou pelo menos 5 a 7 dias antes para tarefas comuns) como o campo 'deadline' ou 'scheduledTime' da tarefa, explicando ao usuário o porquê de estar adiantando o prazo para que ele não deixe para a última hora.
+      3. Se o usuário não informar o vencimento real, defina um prazo proativo recomendado de acordo com a natureza da tarefa (ex: 30 dias a partir de hoje para renovar carteira de motorista ou passaporte) e avise-o.
+    - Ajude o usuário a gerenciar o tempo ativamente: ao listar tarefas ou planejar o dia com 'compare_scheduling_days', destaque se alguma tarefa importante está próxima do prazo limite ou se precisa ser adiantada.`;
 
 // Declare tools for Gemini function calling
 export const calendarTools = {
