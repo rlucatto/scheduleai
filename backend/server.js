@@ -100,24 +100,233 @@ app.get('/api/auth/callback', async (req, res) => {
 
     // Redirect back or close popup
     res.send(`
-      <html>
-        <head><title>Autenticado</title></head>
-        <body style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #121214; color: white;">
-          <div style="text-align: center; background: #202024; padding: 2rem; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5)">
-            <h1 style="color: #4caf50; margin-bottom: 1rem;">Conectado com sucesso!</h1>
-            <p>Sua agenda Google Calendar está conectada ao ScheduleAI.</p>
-            <p id="sub-text">Você pode fechar esta aba agora.</p>
-            <script>
-              const isPopup = !!window.opener;
-              if (!isPopup) {
-                document.getElementById('sub-text').innerText = 'Redirecionando você de volta para o ScheduleAI...';
-                setTimeout(() => { window.location.href = "${frontendUrl}"; }, 2000);
-              } else {
-                setTimeout(() => { window.close(); }, 2000);
-              }
-            </script>
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Conexão Concluída | ScheduleAI</title>
+        <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+        <style>
+          :root {
+            --bg-gradient: linear-gradient(135deg, #0f0c20 0%, #15102a 50%, #06020f 100%);
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0ab;
+            --success-neon: #00ff87;
+            --success-glow: rgba(0, 255, 135, 0.2);
+          }
+          
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+
+          body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-primary);
+            overflow: hidden;
+          }
+
+          /* Background decorative ambient lights */
+          .glow-orb {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(123, 97, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 0;
+            pointer-events: none;
+          }
+
+          .container {
+            position: relative;
+            z-index: 1;
+            width: 90%;
+            max-width: 460px;
+            text-align: center;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 3rem 2rem;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+            animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+          }
+
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          /* Icon Container and Animations */
+          .icon-wrapper {
+            position: relative;
+            width: 96px;
+            height: 96px;
+            margin: 0 auto 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .icon-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 3px solid rgba(0, 255, 135, 0.15);
+            box-shadow: 0 0 20px var(--success-glow);
+          }
+
+          .icon-ring-pulse {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 3px solid var(--success-neon);
+            animation: pulse 2s infinite ease-out;
+            opacity: 0;
+          }
+
+          @keyframes pulse {
+            0% {
+              transform: scale(1);
+              opacity: 0.6;
+            }
+            100% {
+              transform: scale(1.3);
+              opacity: 0;
+            }
+          }
+
+          .checkmark-svg {
+            width: 48px;
+            height: 48px;
+            color: var(--success-neon);
+            z-index: 1;
+          }
+
+          .checkmark-path {
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+            animation: drawCheckmark 0.6s 0.2s ease-in-out forwards;
+          }
+
+          @keyframes drawCheckmark {
+            to {
+              stroke-dashoffset: 0;
+            }
+          }
+
+          /* Typography */
+          h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, #dcdcdf 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+          }
+
+          p {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 2rem;
+          }
+
+          /* Redirection/Sub text */
+          .status-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 10px 16px;
+            border-radius: 12px;
+            display: inline-flex;
+          }
+
+          .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--success-neon);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+          }
+
+          @keyframes spin {
+            to {
+              transform: rotate(360deg);
+            }
+          }
+
+          .status-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="glow-orb"></div>
+        <div class="container">
+          <div class="icon-wrapper">
+            <div class="icon-ring"></div>
+            <div class="icon-ring-pulse"></div>
+            <svg class="checkmark-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12" class="checkmark-path"></polyline>
+            </svg>
           </div>
-        </body>
+          
+          <h1>Conexão Realizada!</h1>
+          <p>Sua agenda Google Calendar foi vinculada com sucesso ao <strong>ScheduleAI</strong> para automação inteligente dos seus compromissos.</p>
+          
+          <div class="status-container">
+            <div class="spinner" id="status-spinner"></div>
+            <span class="status-text" id="status-text">Carregando...</span>
+          </div>
+        </div>
+
+        <script>
+          const isPopup = !!window.opener;
+          const subText = document.getElementById('status-text');
+          const spinner = document.getElementById('status-spinner');
+          
+          if (!isPopup) {
+            subText.innerText = 'Redirecionando de volta...';
+            setTimeout(() => {
+              window.location.href = "${frontendUrl}";
+            }, 2000);
+          } else {
+            subText.innerText = 'Fechando esta janela em instantes...';
+            setTimeout(() => {
+              window.close();
+            }, 2000);
+          }
+        </script>
+      </body>
       </html>
     `);
   } catch (error) {
