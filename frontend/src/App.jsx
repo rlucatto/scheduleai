@@ -2573,38 +2573,35 @@ function App() {
                             {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                           </div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>
                                 {contact.name}
                               </span>
                               
                               {/* Contact tag badges */}
-                              {contact.tags && contact.tags.length > 0 && (
-                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                  {contact.tags.map(tagName => {
-                                    let bg = 'rgba(255, 255, 255, 0.05)';
-                                    let fg = 'var(--text-secondary)';
-                                    if (tagName.toLowerCase() === 'amigo') { bg = 'rgba(76, 175, 80, 0.15)'; fg = '#4caf50'; }
-                                    else if (tagName.toLowerCase() === 'pessoal') { bg = 'rgba(33, 150, 243, 0.15)'; fg = '#2196f3'; }
-                                    else if (tagName.toLowerCase() === 'trabalho') { bg = 'rgba(244, 67, 54, 0.15)'; fg = '#f44336'; }
-                                    else if (tagName.toLowerCase() === 'família' || tagName.toLowerCase() === 'familia') { bg = 'rgba(255, 152, 0, 0.15)'; fg = '#ff9800'; }
-                                    else { bg = 'rgba(156, 39, 176, 0.15)'; fg = '#9c27b0'; }
-                                    
-                                    return (
-                                      <span key={tagName} style={{
-                                        padding: '2px 8px',
-                                        fontSize: '10px',
-                                        borderRadius: '4px',
-                                        background: bg,
-                                        color: fg,
-                                        fontWeight: '600'
-                                      }}>
-                                        {tagName}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              )}
+                              {contact.tags && contact.tags.map(tagName => {
+                                let bg = 'rgba(255, 255, 255, 0.05)';
+                                let fg = 'var(--text-secondary)';
+                                if (tagName.toLowerCase() === 'amigo') { bg = 'rgba(76, 175, 80, 0.15)'; fg = '#4caf50'; }
+                                else if (tagName.toLowerCase() === 'pessoal') { bg = 'rgba(33, 150, 243, 0.15)'; fg = '#2196f3'; }
+                                else if (tagName.toLowerCase() === 'trabalho') { bg = 'rgba(244, 67, 54, 0.15)'; fg = '#f44336'; }
+                                else if (tagName.toLowerCase() === 'família' || tagName.toLowerCase() === 'familia') { bg = 'rgba(255, 152, 0, 0.15)'; fg = '#ff9800'; }
+                                else { bg = 'rgba(156, 39, 176, 0.15)'; fg = '#9c27b0'; }
+                                
+                                return (
+                                  <span key={tagName} style={{
+                                    padding: '2px 8px',
+                                    fontSize: '10px',
+                                    borderRadius: '4px',
+                                    background: bg,
+                                    color: fg,
+                                    fontWeight: '600',
+                                    display: 'inline-block'
+                                  }}>
+                                    {tagName}
+                                  </span>
+                                );
+                              })}
                             </div>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
