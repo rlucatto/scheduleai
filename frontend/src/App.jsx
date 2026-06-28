@@ -999,7 +999,7 @@ function App() {
   const connectGoogle = async () => {
     try {
       const origin = window.location.origin;
-      const res = await fetch(`${BACKEND_URL}/api/auth/url?origin=${encodeURIComponent(origin)}`);
+      const res = await fetch(`${BACKEND_URL}/api/auth/url?origin=${encodeURIComponent(origin)}&theme=${theme}`);
       const data = await res.json();
       if (data.url) {
         // Redirect directly in the same tab to prevent browser pop-up blockers
@@ -1013,7 +1013,7 @@ function App() {
   const connectGoogleRedirect = async () => {
     try {
       const origin = window.location.origin;
-      const res = await fetch(`${BACKEND_URL}/api/auth/url?origin=${encodeURIComponent(origin)}`);
+      const res = await fetch(`${BACKEND_URL}/api/auth/url?origin=${encodeURIComponent(origin)}&theme=${theme}`);
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;

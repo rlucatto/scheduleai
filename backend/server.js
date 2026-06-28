@@ -72,8 +72,10 @@ app.get('/api/auth/status', (req, res) => {
 });
 
 app.get('/api/auth/url', (req, res) => {
-  const { origin } = req.query;
-  const url = getAuthUrl(origin);
+  const { origin, theme } = req.query;
+  const stateObj = { origin: origin || '', theme: theme || 'dark' };
+  const stateStr = Buffer.from(JSON.stringify(stateObj)).toString('base64');
+  const url = getAuthUrl(stateStr);
   if (url) {
     res.json({ url });
   } else {
@@ -90,9 +92,26 @@ app.get('/api/auth/callback', async (req, res) => {
     await handleAuthCode(code);
     io.emit('auth_change', { status: getAuthStatus(), preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
     
+    // Decode state
+    let origin = '';
+    let theme = 'dark';
+    if (state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
+        origin = decoded.origin;
+        theme = decoded.theme;
+      } catch (err) {
+        if (state.startsWith('http')) {
+          origin = state;
+        } else {
+          console.error('Failed to parse state:', err.message);
+        }
+      }
+    }
+
     // Determine frontend URL dynamically (from state, local host fallback, or production)
-    let frontendUrl = state || 'https://scheduleai-rlucatto.web.app';
-    if (!state) {
+    let frontendUrl = origin || 'https://scheduleai-rlucatto.web.app';
+    if (!origin) {
       const host = req.headers.host || '';
       const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
       frontendUrl = isLocal ? 'http://localhost:5175' : 'https://scheduleai-rlucatto.web.app';
@@ -109,6 +128,15 @@ app.get('/api/auth/callback', async (req, res) => {
         <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
         <style>
           :root {
+            ${theme === 'light' ? `
+            --bg-gradient: linear-gradient(135deg, #f5f5f7 0%, #e8e8f0 50%, #d2d2dc 100%);
+            --glass-bg: rgba(255, 255, 255, 0.45);
+            --glass-border: rgba(0, 0, 0, 0.08);
+            --text-primary: #1d1d1f;
+            --text-secondary: #515154;
+            --success-neon: #00b05b;
+            --success-glow: rgba(0, 176, 91, 0.15);
+            ` : `
             --bg-gradient: linear-gradient(135deg, #0f0c20 0%, #15102a 50%, #06020f 100%);
             --glass-bg: rgba(255, 255, 255, 0.03);
             --glass-border: rgba(255, 255, 255, 0.08);
@@ -116,6 +144,7 @@ app.get('/api/auth/callback', async (req, res) => {
             --text-secondary: #a0a0ab;
             --success-neon: #00ff87;
             --success-glow: rgba(0, 255, 135, 0.2);
+            `}
           }
           
           * {
@@ -133,6 +162,7 @@ app.get('/api/auth/callback', async (req, res) => {
             align-items: center;
             color: var(--text-primary);
             overflow: hidden;
+            transition: all 0.3s ease;
           }
 
           /* Background decorative ambient lights */
@@ -141,7 +171,9 @@ app.get('/api/auth/callback', async (req, res) => {
             width: 400px;
             height: 400px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(123, 97, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+            background: ${theme === 'light' 
+              ? 'radial-gradient(circle, rgba(123, 97, 255, 0.05) 0%, rgba(255, 255, 255, 0) 70%)' 
+              : 'radial-gradient(circle, rgba(123, 97, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%)'};
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
@@ -161,7 +193,7 @@ app.get('/api/auth/callback', async (req, res) => {
             border: 1px solid var(--glass-border);
             border-radius: 24px;
             padding: 3rem 2rem;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
             animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
           }
 
@@ -192,7 +224,7 @@ app.get('/api/auth/callback', async (req, res) => {
             width: 100%;
             height: 100%;
             border-radius: 50%;
-            border: 3px solid rgba(0, 255, 135, 0.15);
+            border: 3px solid ${theme === 'light' ? 'rgba(0, 176, 91, 0.15)' : 'rgba(0, 255, 135, 0.15)'};
             box-shadow: 0 0 20px var(--success-glow);
           }
 
@@ -242,7 +274,7 @@ app.get('/api/auth/callback', async (req, res) => {
             font-weight: 700;
             margin-bottom: 0.75rem;
             letter-spacing: -0.5px;
-            background: linear-gradient(135deg, #ffffff 0%, #dcdcdf 100%);
+            background: ${theme === 'light' ? 'linear-gradient(135deg, #1d1d1f 0%, #424245 100%)' : 'linear-gradient(135deg, #ffffff 0%, #dcdcdf 100%)'};
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
           }
@@ -260,8 +292,8 @@ app.get('/api/auth/callback', async (req, res) => {
             align-items: center;
             justify-content: center;
             gap: 10px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.04);
+            background: ${theme === 'light' ? 'rgba(0, 0, 0, 0.02)' : 'rgba(255, 255, 255, 0.02)'};
+            border: 1px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.04)' : 'rgba(255, 255, 255, 0.04)'};
             padding: 10px 16px;
             border-radius: 12px;
             display: inline-flex;
@@ -270,7 +302,7 @@ app.get('/api/auth/callback', async (req, res) => {
           .spinner {
             width: 16px;
             height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.1);
+            border: 2px solid ${theme === 'light' ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.1)'};
             border-top-color: var(--success-neon);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
