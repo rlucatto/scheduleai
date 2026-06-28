@@ -795,6 +795,61 @@ function App() {
 
   // Toggle birthday alert status for a contact
   const handleToggleBirthdayAlert = async (contact) => {
+    if (!contact.birthday) {
+      const bdayInput = prompt(`Por favor, insira o aniversário de ${contact.name} (formato: DD/MM/AAAA ou DD/MM):`);
+      if (!bdayInput) {
+        addCustomToast('Aviso', 'Aniversário não cadastrado. É necessário um aniversário para ativar o lembrete.', 'warning');
+        return;
+      }
+      
+      const parts = bdayInput.trim().split('/');
+      let formattedBday = '';
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        const year = parts[2];
+        formattedBday = `${year}-${month}-${day}`;
+      } else if (parts.length === 2) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        formattedBday = `${month}-${day}`;
+      } else if (bdayInput.includes('-')) {
+        formattedBday = bdayInput.trim();
+      }
+      
+      const isValid = /^\d{4}-\d{2}-\d{2}$/.test(formattedBday) || /^\d{2}-\d{2}$/.test(formattedBday);
+      if (!isValid) {
+        addCustomToast('Erro', 'Formato de data inválido. Use DD/MM/AAAA ou DD/MM.', 'error');
+        return;
+      }
+      
+      try {
+        const updateRes = await fetch(`${BACKEND_URL}/api/contacts/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            resourceName: contact.resourceName,
+            contactData: { birthday: formattedBday }
+          })
+        });
+        
+        if (updateRes.ok) {
+          const updatedContact = await updateRes.json();
+          setContacts(prev => prev.map(c => c.resourceName === contact.resourceName ? { ...c, birthday: updatedContact.birthday } : c));
+          contact.birthday = updatedContact.birthday;
+          addCustomToast('Sucesso', 'Aniversário salvo com sucesso no Google Contacts!', 'success');
+        } else {
+          const errData = await updateRes.json();
+          addCustomToast('Erro', `Falha ao salvar o aniversário: ${errData.error}`, 'error');
+          return;
+        }
+      } catch (err) {
+        console.error('Error updating Google contact birthday:', err);
+        addCustomToast('Erro', 'Não foi possível salvar o aniversário no Google Contacts.', 'error');
+        return;
+      }
+    }
+
     const name = contact.name;
     const currentAlerts = preferences.birthdayAlerts || '';
     const monitoredNames = currentAlerts.split(',').map(n => n.trim()).filter(Boolean);

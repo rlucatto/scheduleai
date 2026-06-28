@@ -36,7 +36,7 @@ import {
   backupPlanVersion,
   getPlanVersions
 } from './services/planning.js';
-import { listGoogleContacts } from './services/contacts.js';
+import { listGoogleContacts, updateGoogleContact } from './services/contacts.js';
 import {
   getVisibleTags,
   addTag,
@@ -552,6 +552,16 @@ app.get('/api/contacts', async (req, res) => {
     }));
     
     res.json(enriched);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/contacts/update', async (req, res) => {
+  try {
+    const { resourceName, contactData } = req.body;
+    const updated = await updateGoogleContact(resourceName, contactData);
+    res.json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
