@@ -32,7 +32,8 @@ import {
   Phone,
   Mail,
   Cake,
-  Tag
+  Tag,
+  Star
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -828,6 +829,44 @@ function App() {
     } catch (err) {
       console.error('Error saving updated birthday alert preferences:', err);
       addCustomToast('Erro', 'Não foi possível salvar a preferência de alerta.', 'error');
+    }
+  };
+
+  // Toggle a tag as favorite in preferences
+  const handleToggleFavoriteTag = async (tagName) => {
+    const currentFavorites = preferences.favoriteTags || '';
+    const favoriteNames = currentFavorites.split(',').map(n => n.trim()).filter(Boolean);
+    const isAlreadyFavorite = favoriteNames.some(n => n.toLowerCase() === tagName.toLowerCase());
+    
+    let updatedFavoritesList;
+    if (isAlreadyFavorite) {
+      updatedFavoritesList = favoriteNames.filter(n => n.toLowerCase() !== tagName.toLowerCase());
+    } else {
+      updatedFavoritesList = [...favoriteNames, tagName];
+    }
+    
+    const updatedFavoritesString = updatedFavoritesList.join(', ');
+    const updatedPrefs = {
+      ...preferences,
+      favoriteTags: updatedFavoritesString
+    };
+    
+    setPreferences(updatedPrefs);
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/preferences`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPrefs)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPreferences(data);
+        addCustomToast('Sucesso', isAlreadyFavorite ? `Tag "${tagName}" removida dos favoritos.` : `Tag "${tagName}" favoritada!`, 'success');
+      }
+    } catch (err) {
+      console.error('Error saving updated favorite tags preferences:', err);
+      addCustomToast('Erro', 'Não foi possível salvar a preferência de favoritos.', 'error');
     }
   };
 
@@ -2357,6 +2396,13 @@ function App() {
                     mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address.trim())}`;
                   }
 
+                  // Compute visible favorite tags for quick toggle buttons
+                  const currentFavorites = preferences.favoriteTags || '';
+                  const favoriteNames = currentFavorites.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+                  const visibleFavoriteTagNames = allTags
+                    .filter(tag => favoriteNames.includes(tag.name.toLowerCase()))
+                    .map(tag => tag.name);
+
                   return (
                     <div key={contact.resourceName} className="card glass hover-lift" style={{ padding: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
@@ -2473,6 +2519,54 @@ function App() {
                             <Tag size={13} style={{ color: 'var(--text-secondary)' }} />
                             <span>Tags</span>
                           </button>
+
+                          {/* Favorite Tags Quick Toggles */}
+                          {visibleFavoriteTagNames.map(tagName => {
+                            const isAssociated = (contact.tags || []).includes(tagName);
+                            
+                            // Color scheme for active tag
+                            let activeBg = 'rgba(156, 39, 176, 0.15)';
+                            let activeFg = '#9c27b0';
+                            let activeBorder = '1px solid #9c27b0';
+                            
+                            if (tagName.toLowerCase() === 'amigo') {
+                              activeBg = 'rgba(76, 175, 80, 0.15)';
+                              activeFg = '#4caf50';
+                              activeBorder = '1px solid #4caf50';
+                            } else if (tagName.toLowerCase() === 'pessoal') {
+                              activeBg = 'rgba(33, 150, 243, 0.15)';
+                              activeFg = '#2196f3';
+                              activeBorder = '1px solid #2196f3';
+                            } else if (tagName.toLowerCase() === 'trabalho') {
+                              activeBg = 'rgba(244, 67, 54, 0.15)';
+                              activeFg = '#f44336';
+                              activeBorder = '1px solid #f44336';
+                            }
+
+                            return (
+                              <button
+                                key={`quick-${tagName}`}
+                                onClick={() => handleToggleContactTag(contact, tagName)}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  borderRadius: '20px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: isAssociated ? activeBg : 'rgba(255, 255, 255, 0.03)',
+                                  color: isAssociated ? activeFg : 'var(--text-secondary)',
+                                  border: isAssociated ? activeBorder : '1px solid var(--border-color)',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                title={isAssociated ? `Remover tag "${tagName}"` : `Adicionar tag "${tagName}"`}
+                              >
+                                <Star size={11} fill={isAssociated ? 'currentColor' : 'none'} style={{ color: isAssociated ? 'inherit' : 'var(--text-secondary)' }} />
+                                <span>{tagName}</span>
+                              </button>
+                            );
+                          })}
 
                           <button 
                             className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
@@ -2836,34 +2930,59 @@ function App() {
                   {allTags.length === 0 ? (
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nenhuma tag cadastrada.</div>
                   ) : (
-                    allTags.map(tag => (
-                      <div 
-                        key={tag.id}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '8px 12px',
-                          background: 'rgba(255,255,255,0.01)',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '8px'
-                        }}
-                      >
-                        <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>
-                          {tag.name}
-                        </span>
-                        <span style={{ 
-                          fontSize: '11px', 
-                          background: tag.type === 'global' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(33, 150, 243, 0.15)',
-                          color: tag.type === 'global' ? '#4caf50' : '#2196f3',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          fontWeight: '600'
-                        }}>
-                          {tag.type === 'global' ? 'Global' : 'Privada 🔒'}
-                        </span>
-                      </div>
-                    ))
+                    allTags.map(tag => {
+                      const currentFavorites = preferences.favoriteTags || '';
+                      const favoriteNames = currentFavorites.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+                      const isFavorite = favoriteNames.includes(tag.name.toLowerCase());
+
+                      return (
+                        <div 
+                          key={tag.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '8px 12px',
+                            background: 'rgba(255,255,255,0.01)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              onClick={() => handleToggleFavoriteTag(tag.name)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '4px',
+                                color: isFavorite ? '#ffc107' : 'rgba(255, 255, 255, 0.2)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'color 0.2s ease'
+                              }}
+                              title={isFavorite ? 'Remover dos Favoritos' : 'Favoritar Tag'}
+                            >
+                              <Star size={16} fill={isFavorite ? '#ffc107' : 'none'} />
+                            </button>
+                            <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>
+                              {tag.name}
+                            </span>
+                          </div>
+                          <span style={{ 
+                            fontSize: '11px', 
+                            background: tag.type === 'global' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(33, 150, 243, 0.15)',
+                            color: tag.type === 'global' ? '#4caf50' : '#2196f3',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontWeight: '600'
+                          }}>
+                            {tag.type === 'global' ? 'Global' : 'Privada 🔒'}
+                          </span>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
