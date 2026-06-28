@@ -312,9 +312,9 @@ export const startScheduler = (io) => {
   ioInstance = io;
   if (schedulerInterval) clearInterval(schedulerInterval);
   
-  // Check triggers every 15 seconds to ensure alerts are responsive
-  schedulerInterval = setInterval(checkUpcomingEvents, 15000);
-  console.log('Scheduler Service Started (checking triggers every 15s)');
+  // Check triggers every minute to ensure alerts are responsive
+  schedulerInterval = setInterval(checkUpcomingEvents, 60000);
+  console.log('Scheduler Service Started (checking triggers every 60s)');
   
   // Run an initial check immediately
   checkUpcomingEvents();

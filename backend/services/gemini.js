@@ -102,7 +102,9 @@ const classifyRequest = (message = '') => {
     'f1', 'formula', 'fórmula', 'corrida', 'campeonato', 'calendário', 'calendario', 'tabela', 
     'pesquise', 'pesquisa', 'busque', 'busca', 'google', 'internet', 'search', 'find', 'quem ganhou', 
     'resultado', 'vencedor', 'notícias', 'noticias', 'feriado', 'feriados', 'agenda de', 'agenda das',
-    'onde vai ser', 'quando vai ser', 'horário de', 'horario de', 'programação de', 'programacao de'
+    'onde vai ser', 'quando vai ser', 'horário de', 'horario de', 'programação de', 'programacao de',
+    // Bureaucratic and document renewal search queries
+    'cnh', 'carteira', 'habilitação', 'habilitacao', 'detran', 'poupatempo', 'dmv', 'passaporte', 'visto', 'licenciamento', 'documento', 'documentos', 'rg'
   ];
   
   let needsSearch = searchKeywords.some(kw => msgLower.includes(kw));
@@ -390,6 +392,11 @@ Regras de atuação:
       1. Identifique o prazo final real (ultimate deadline) se informado pelo usuário.
       2. Defina PROATIVAMENTE um prazo de execução confortável (geralmente entre 15 a 30 dias antes do vencimento real, ou pelo menos 5 a 7 dias antes para tarefas comuns) como o campo 'deadline' ou 'scheduledTime' da tarefa, explicando ao usuário o porquê de estar adiantando o prazo para que ele não deixe para a última hora.
       3. Se o usuário não informar o vencimento real, defina um prazo proativo recomendado de acordo com a natureza da tarefa (ex: 30 dias a partir de hoje para renovar carteira de motorista ou passaporte) e avise-o.
+    - PROCEDIMENTOS DE DOCUMENTAÇÃO E ÓRGÃOS LOCAIS: Se a tarefa/compromisso for de natureza burocrática ou de renovação de documentos (como renovar carteira de habilitação/CNH, passaporte, RG, etc.):
+      1. Identifique o local atual/cidade do usuário (indicada em 'origin' ou 'homeAddress' nas suas preferências).
+      2. Use as informações de busca na internet (Yahoo/grounding) para verificar o procedimento exato para aquela renovação/burocracia na cidade do usuário.
+      3. Indique proativamente na resposta os postos físicos de atendimento (ex: Poupatempo/DETRAN no Brasil, DMV nos EUA, Polícia Federal para passaporte), a documentação necessária obrigatória (ex: RG, CPF, comprovante de residência, taxa paga, exames exigidos) e orientações adicionais.
+      4. Sempre forneça links do Google Maps clicáveis no formato markdown para os postos físicos indicados (conforme Regra 6).
     - Ajude o usuário a gerenciar o tempo ativamente: ao listar tarefas ou planejar o dia com 'compare_scheduling_days', destaque se alguma tarefa importante está próxima do prazo limite ou se precisa ser adiantada.`;
 
 // Declare tools for Gemini function calling
@@ -1414,6 +1421,14 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
         let result = await chat.sendMessage(message);
         console.log("[AI] Raw model response:", JSON.stringify(result.response, null, 2));
         let responseText = '';
+        try {
+          const firstText = result.response.text();
+          if (firstText) {
+            responseText += firstText + '\n\n';
+          }
+        } catch (e) {
+          // ignore if no text
+        }
         let toolCalls = result.response.functionCalls() || [];
         let allExecutedToolCalls = [];
 
@@ -1536,19 +1551,26 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
           console.log(`[AI] Sending tool responses for turn ${turns}...`);
           result = await chat.sendMessage(toolResponses);
           toolCalls = result.response.functionCalls() || [];
+          try {
+            const nextText = result.response.text();
+            if (nextText) {
+              responseText += nextText + '\n\n';
+            }
+          } catch (e) {
+            // ignore if no text
+          }
         }
 
         if (needsConfirmation) {
+          const finalConfirmationText = responseText ? (responseText.trim() + '\n\n' + confirmationText) : confirmationText;
           return {
-            text: confirmationText,
+            text: finalConfirmationText,
             toolCalls: allExecutedToolCalls
           };
         }
 
-        responseText = result.response.text();
-
         return {
-          text: responseText,
+          text: responseText.trim(),
           toolCalls: allExecutedToolCalls
         };
       },
