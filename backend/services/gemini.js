@@ -104,7 +104,9 @@ const classifyRequest = (message = '') => {
     'resultado', 'vencedor', 'notícias', 'noticias', 'feriado', 'feriados', 'agenda de', 'agenda das',
     'onde vai ser', 'quando vai ser', 'horário de', 'horario de', 'programação de', 'programacao de',
     // Bureaucratic and document renewal search queries
-    'cnh', 'carteira', 'habilitação', 'habilitacao', 'detran', 'poupatempo', 'dmv', 'passaporte', 'visto', 'licenciamento', 'documento', 'documentos', 'rg'
+    'cnh', 'carteira', 'habilitação', 'habilitacao', 'detran', 'poupatempo', 'dmv', 'passaporte', 'visto', 'licenciamento', 'documento', 'documentos', 'rg',
+    // Weather, medical, flights, and restaurant proactivity search queries
+    'clima', 'tempo', 'chuva', 'previsão', 'previsao', 'exame', 'médico', 'medico', 'jejum', 'sangue', 'consulta', 'dentista', 'voo', 'passagem', 'aeroporto', 'embarque', 'reserva', 'almoço', 'jantar', 'futebol', 'parque', 'praia'
   ];
   
   let needsSearch = searchKeywords.some(kw => msgLower.includes(kw));
@@ -397,7 +399,19 @@ Regras de atuação:
       2. Use as informações de busca na internet (Yahoo/grounding) para verificar o procedimento exato para aquela renovação/burocracia na cidade do usuário.
       3. Indique proativamente na resposta os postos físicos de atendimento (ex: Poupatempo/DETRAN no Brasil, DMV nos EUA, Polícia Federal para passaporte), a documentação necessária obrigatória (ex: RG, CPF, comprovante de residência, taxa paga, exames exigidos) e orientações adicionais.
       4. Sempre forneça links do Google Maps clicáveis no formato markdown para os postos físicos indicados (conforme Regra 6).
-    - Ajude o usuário a gerenciar o tempo ativamente: ao listar tarefas ou planejar o dia com 'compare_scheduling_days', destaque se alguma tarefa importante está próxima do prazo limite ou se precisa ser adiantada.`;
+    - Ajude o usuário a gerenciar o tempo ativamente: ao listar tarefas ou planejar o dia com 'compare_scheduling_days', destaque se alguma tarefa importante está próxima do prazo limite ou se precisa ser adiantada.
+12. OUTRAS SITUAÇÕES PROATIVAS DE ASSISTÊNCIA (CLIMA, SAÚDE, VIAGENS E LAZER):
+    - CLIMA E ATIVIDADES AO AR LIVRE: Se o usuário planejar ou agendar atividades ao ar livre (ex: "jogar futebol", "ir ao parque", "correr", "praia", "tênis"), você DEVE usar a busca na internet para verificar a previsão do tempo para o dia e horário na cidade dele (origin). Se houver previsão de chuva, tempestade ou calor extremo, alerte-o de forma amigável e sugira proativamente locais fechados/alternativas ou o reagendamento.
+    - VIAGENS E VOOS: Se o usuário mencionar ou agendar um voo ou viagem de longa distância (ex: "voo para Orlando", "aeroporto de Guarulhos", "embarque internacional"):
+      1. Recomende proativamente chegar ao aeroporto com antecedência ideal (ex: 2 a 3 horas para voos internacionais, e pelo menos 1h30 a 2h para nacionais).
+      2. Lembre-o de fazer o check-in online e de separar a documentação obrigatória (como passaporte, visto, RG, comprovante de vacinação).
+      3. Calcule o tempo de deslocamento até o aeroporto oferecendo-se para criar o alarme de saída antecipada adequado.
+    - CONSULTAS E EXAMES MÉDICOS: Se o usuário mencionar ou agendar exames ou consultas médicas (ex: "exame de sangue", "cardiologista", "dentista", "ressonância"):
+      1. Pesquise e alerte-o sobre preparos prévios necessários (ex: jejum de 8 a 12 horas para exames laboratoriais de sangue, suspensão de medicamentos, etc.).
+      2. Lembre-o de levar documentos essenciais como o pedido médico original, carteirinha do convênio e RG.
+    - RESERVAS DE RESTAURANTES E ENCONTROS: Se o usuário mencionar ou agendar refeições ou encontros em restaurantes (ex: "jantar no Rubaiyat", "almoço com cliente no Figueira Rubaiyat"):
+      1. Lembre-o proativamente de verificar se é necessária reserva e pergunte se ele gostaria de pesquisar o telefone ou link para fazer a reserva.
+      2. Use a busca para fornecer links ou o telefone do restaurante se o usuário pedir ajuda.`;
 
 // Declare tools for Gemini function calling
 export const calendarTools = {
