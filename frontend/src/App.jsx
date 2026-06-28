@@ -2558,7 +2558,7 @@ function App() {
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', width: '100%' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', rowGap: '4px', width: '100%' }}>
-                              <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px', flexShrink: 0 }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px', flexShrink: 0, lineHeight: '1.1' }}>
                                 {contact.name}
                               </span>
                               
@@ -2641,7 +2641,7 @@ function App() {
                             </div>
 
                             {/* Row 2: Phone (left) and Lembrar Aniversário (right) */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '0px', minHeight: '24px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '-4px', minHeight: '24px' }}>
                               {contact.phone ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                                   <Phone size={12} style={{ color: 'var(--accent-hover)' }} />
