@@ -213,6 +213,7 @@ function App() {
   const [newTagNameInput, setNewTagNameInput] = useState('');
   const [newTagTypeInput, setNewTagTypeInput] = useState('private');
   const [selectedFilterTag, setSelectedFilterTag] = useState('Todos');
+  const [showTagSettingsModal, setShowTagSettingsModal] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('medium');
@@ -2251,46 +2252,67 @@ function App() {
                 style={{ width: '100%', marginBottom: '12px' }}
               />
               
-              {/* Tag Filter Pills */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {/* Tag Filter Pills and Settings Button */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setSelectedFilterTag('Todos')}
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '12px',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      border: '1px solid var(--border-color)',
+                      background: selectedFilterTag === 'Todos' ? 'var(--accent-hover)' : 'rgba(255, 255, 255, 0.02)',
+                      color: selectedFilterTag === 'Todos' ? '#fff' : 'var(--text-secondary)',
+                      fontWeight: selectedFilterTag === 'Todos' ? 'bold' : 'normal',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Todos
+                  </button>
+                  {allTags.map(tag => {
+                    const isSelected = selectedFilterTag === tag.name;
+                    return (
+                      <button
+                        key={tag.id}
+                        onClick={() => setSelectedFilterTag(tag.name)}
+                        style={{
+                          padding: '4px 12px',
+                          fontSize: '12px',
+                          borderRadius: '12px',
+                          cursor: 'pointer',
+                          border: '1px solid var(--border-color)',
+                          background: isSelected ? 'var(--accent-hover)' : 'rgba(255, 255, 255, 0.02)',
+                          color: isSelected ? '#fff' : 'var(--text-secondary)',
+                          fontWeight: isSelected ? 'bold' : 'normal',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        {tag.name} {tag.type === 'global' ? '' : '🔒'}
+                      </button>
+                    );
+                  })}
+                </div>
+                
                 <button
-                  onClick={() => setSelectedFilterTag('Todos')}
+                  onClick={() => setShowTagSettingsModal(true)}
                   style={{
-                    padding: '4px 12px',
-                    fontSize: '12px',
-                    borderRadius: '12px',
+                    padding: '8px',
+                    borderRadius: '50%',
                     cursor: 'pointer',
                     border: '1px solid var(--border-color)',
-                    background: selectedFilterTag === 'Todos' ? 'var(--accent-hover)' : 'rgba(255, 255, 255, 0.02)',
-                    color: selectedFilterTag === 'Todos' ? '#fff' : 'var(--text-secondary)',
-                    fontWeight: selectedFilterTag === 'Todos' ? 'bold' : 'normal',
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     transition: 'all 0.2s ease'
                   }}
+                  title="Configurar Tags"
                 >
-                  Todos
+                  <Settings size={16} />
                 </button>
-                {allTags.map(tag => {
-                  const isSelected = selectedFilterTag === tag.name;
-                  return (
-                    <button
-                      key={tag.id}
-                      onClick={() => setSelectedFilterTag(tag.name)}
-                      style={{
-                        padding: '4px 12px',
-                        fontSize: '12px',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        border: '1px solid var(--border-color)',
-                        background: isSelected ? 'var(--accent-hover)' : 'rgba(255, 255, 255, 0.02)',
-                        color: isSelected ? '#fff' : 'var(--text-secondary)',
-                        fontWeight: isSelected ? 'bold' : 'normal',
-                        transition: 'all 0.2s ease'
-                      }}
-                    >
-                      {tag.name} {tag.type === 'global' ? '' : '🔒'}
-                    </button>
-                  );
-                })}
               </div>
             </div>
 
@@ -2525,49 +2547,6 @@ function App() {
                             })}
                           </div>
                           
-                          {/* Create tag inline form */}
-                          <form 
-                            onSubmit={async (e) => {
-                              e.preventDefault();
-                              if (!newTagNameInput.trim()) return;
-                              const newTag = await handleCreateTag(newTagNameInput, newTagTypeInput);
-                              if (newTag) {
-                                handleToggleContactTag(contact, newTag);
-                              }
-                            }}
-                            style={{
-                              display: 'flex',
-                              gap: '8px',
-                              alignItems: 'center',
-                              flexWrap: 'wrap',
-                              marginTop: '8px'
-                            }}
-                          >
-                            <input 
-                              type="text" 
-                              className="form-input"
-                              placeholder="Nova tag..."
-                              value={newTagNameInput}
-                              onChange={e => setNewTagNameInput(e.target.value)}
-                              style={{ flex: 1, minWidth: '120px', padding: '6px 10px', fontSize: '12px' }}
-                            />
-                            
-                            {status.userEmail === 'rafael.lucatto@gmail.com' && (
-                              <select 
-                                className="form-input"
-                                value={newTagTypeInput}
-                                onChange={e => setNewTagTypeInput(e.target.value)}
-                                style={{ padding: '6px 10px', fontSize: '12px' }}
-                              >
-                                <option value="private">Privada</option>
-                                <option value="global">Global</option>
-                              </select>
-                            )}
-                            
-                            <button type="submit" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>
-                              Criar e Associar
-                            </button>
-                          </form>
                         </div>
                       )}
                     </div>
@@ -2783,6 +2762,118 @@ function App() {
             <p style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center' }}>
               💡 <em>O ScheduleAI escolhes e ordena os modelos dinamicamente com base nas palavras-chave do seu pedido.</em>
             </p>
+          </div>
+        </div>
+      )}
+
+      {showTagSettingsModal && (
+        <div className="modal-overlay" onClick={() => setShowTagSettingsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h3>Configuração de Tags de Contatos</h3>
+              <button className="modal-close" onClick={() => setShowTagSettingsModal(false)}>✕</button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                Crie tags para organizar seus contatos. Tags criadas por você são privadas (🔒) e visíveis apenas na sua conta.
+                {status.userEmail === 'rafael.lucatto@gmail.com' && " Como administrador, você também pode criar tags globais."}
+              </p>
+              
+              {/* Form to create new tag */}
+              <form 
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newTagNameInput.trim()) return;
+                  await handleCreateTag(newTagNameInput, newTagTypeInput);
+                }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  background: 'rgba(255,255,255,0.02)',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)'
+                }}
+              >
+                <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--text-primary)' }}>
+                  Criar Nova Tag:
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input 
+                    type="text" 
+                    className="form-input"
+                    placeholder="Nome da tag..."
+                    value={newTagNameInput}
+                    onChange={e => setNewTagNameInput(e.target.value)}
+                    style={{ flex: 1 }}
+                    required
+                  />
+                  {status.userEmail === 'rafael.lucatto@gmail.com' && (
+                    <select 
+                      className="form-input"
+                      value={newTagTypeInput}
+                      onChange={e => setNewTagTypeInput(e.target.value)}
+                      style={{ width: '120px' }}
+                    >
+                      <option value="private">Privada</option>
+                      <option value="global">Global</option>
+                    </select>
+                  )}
+                </div>
+                <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-end', padding: '8px 16px' }}>
+                  Criar Tag
+                </button>
+              </form>
+
+              {/* Tag List */}
+              <div>
+                <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  Tags Disponíveis:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {allTags.length === 0 ? (
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nenhuma tag cadastrada.</div>
+                  ) : (
+                    allTags.map(tag => (
+                      <div 
+                        key={tag.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '8px 12px',
+                          background: 'rgba(255,255,255,0.01)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '8px'
+                        }}
+                      >
+                        <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)' }}>
+                          {tag.name}
+                        </span>
+                        <span style={{ 
+                          fontSize: '11px', 
+                          background: tag.type === 'global' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(33, 150, 243, 0.15)',
+                          color: tag.type === 'global' ? '#4caf50' : '#2196f3',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontWeight: '600'
+                        }}>
+                          {tag.type === 'global' ? 'Global' : 'Privada 🔒'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button className="btn btn-secondary" onClick={() => setShowTagSettingsModal(false)}>
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
