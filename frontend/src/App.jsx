@@ -2562,6 +2562,40 @@ function App() {
                                 {contact.name}
                               </span>
                               
+                              <button 
+                                className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => handleToggleBirthdayAlert(contact)}
+                                style={{ 
+                                  padding: '4px 10px', 
+                                  fontSize: '11px', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '6px',
+                                  borderRadius: '20px',
+                                  background: isMonitored ? 'rgba(235, 94, 85, 0.2)' : 'rgba(255,255,255,0.03)',
+                                  color: isMonitored ? '#eb5e55' : 'var(--text-secondary)',
+                                  border: isMonitored ? '1px solid #eb5e55' : '1px solid var(--border-color)',
+                                  height: '24px',
+                                  marginLeft: 'auto'
+                                }}
+                                title={isMonitored ? 'Alerta de Aniversário Ativo' : 'Ativar Alerta de Aniversário'}
+                              >
+                                <Cake size={11} style={{ color: isMonitored ? '#eb5e55' : 'var(--text-secondary)' }} />
+                                <span>{isMonitored ? 'Alerta Ativo' : 'Lembrar Aniversário'}</span>
+                              </button>
+                            </div>
+
+                            {/* Row 2: Phone (left) and Tags (right) */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '-4px', minHeight: '24px' }}>
+                              {contact.phone ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                  <Phone size={12} style={{ color: 'var(--accent-hover)' }} />
+                                  <span>{contact.phone}</span>
+                                </div>
+                              ) : (
+                                <div></div>
+                              )}
+                              
                               {/* Tags container aligned to the right */}
                               <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', rowGap: '2px', justifyContent: 'flex-end', marginLeft: 'auto', alignItems: 'center' }}>
                                 {/* Favorite Tags Quick Toggles */}
@@ -2638,39 +2672,6 @@ function App() {
                                   );
                                 })}
                               </div>
-                            </div>
-
-                            {/* Row 2: Phone (left) and Lembrar Aniversário (right) */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '-4px', minHeight: '24px' }}>
-                              {contact.phone ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                  <Phone size={12} style={{ color: 'var(--accent-hover)' }} />
-                                  <span>{contact.phone}</span>
-                                </div>
-                              ) : (
-                                <div></div>
-                              )}
-                              
-                              <button 
-                                className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => handleToggleBirthdayAlert(contact)}
-                                style={{ 
-                                  padding: '4px 10px', 
-                                  fontSize: '11px', 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  gap: '6px',
-                                  borderRadius: '20px',
-                                  background: isMonitored ? 'rgba(235, 94, 85, 0.2)' : 'rgba(255,255,255,0.03)',
-                                  color: isMonitored ? '#eb5e55' : 'var(--text-secondary)',
-                                  border: isMonitored ? '1px solid #eb5e55' : '1px solid var(--border-color)',
-                                  height: '24px'
-                                }}
-                                title={isMonitored ? 'Alerta de Aniversário Ativo' : 'Ativar Alerta de Aniversário'}
-                              >
-                                <Cake size={11} style={{ color: isMonitored ? '#eb5e55' : 'var(--text-secondary)' }} />
-                                <span>{isMonitored ? 'Alerta Ativo' : 'Lembrar Aniversário'}</span>
-                              </button>
                             </div>
                             
                             {/* Row 3: Rest of contact details (email, address, birthday) */}
