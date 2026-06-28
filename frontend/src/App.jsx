@@ -2027,51 +2027,77 @@ function App() {
             )}
           </div>
 
-          <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%' }}>
-            <button
-              type="button"
-              className={`btn-mic-outer ${isListening ? 'listening' : ''}`}
-              onPointerDown={startListening}
-              onPointerUp={stopListening}
-              onPointerLeave={stopListening}
-              onPointerCancel={stopListening}
-              title="Pressione e segure para falar"
-              style={{
-                width: '46px',
-                height: '46px',
-                minWidth: '46px',
-                borderRadius: '50%',
-                background: isListening ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                border: isListening ? '1px solid #ef4444' : '1px solid var(--border-color)',
-                color: isListening ? '#ef4444' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                touchAction: 'none',
-                boxShadow: isListening ? '0 0 15px rgba(239, 68, 68, 0.3)' : 'none'
-              }}
-            >
-              <Mic size={22} className={isListening ? 'pulse-mic' : ''} />
-            </button>
-
-            <div className="chat-input-wrapper" style={{ flex: 1 }}>
-              <input 
-                type="text" 
-                className="chat-input"
-                placeholder={isListening ? 'Ouvindo você... Fale agora' : "Envie uma mensagem (ex: 'Marcar jantar às 21h no Rubaiyat'...)"} 
-                value={inputText}
-                onChange={e => setInputText(e.target.value)}
-                disabled={isSendingChat || isListening}
-              />
-              <button type="submit" className="btn btn-primary chat-send-btn" disabled={isSendingChat || isListening || !inputText.trim()}>
-                <Send size={16} />
+          {isMobile && !status.isConnected ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%', padding: '8px 0' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', margin: 0 }}>
+                Conecte seu Google Calendar para começar a conversar com o assistente.
+              </p>
+              <button
+                onClick={connectGoogle}
+                className="btn btn-primary"
+                style={{
+                  width: '100%',
+                  padding: '12px 24px',
+                  borderRadius: '24px',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 15px rgba(123, 97, 255, 0.3)'
+                }}
+              >
+                <Calendar size={18} />
+                <span>Conectar Google Calendar</span>
               </button>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%' }}>
+              <button
+                type="button"
+                className={`btn-mic-outer ${isListening ? 'listening' : ''}`}
+                onPointerDown={startListening}
+                onPointerUp={stopListening}
+                onPointerLeave={stopListening}
+                onPointerCancel={stopListening}
+                title="Pressione e segure para falar"
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  minWidth: '46px',
+                  borderRadius: '50%',
+                  background: isListening ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                  border: isListening ? '1px solid #ef4444' : '1px solid var(--border-color)',
+                  color: isListening ? '#ef4444' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                  touchAction: 'none',
+                  boxShadow: isListening ? '0 0 15px rgba(239, 68, 68, 0.3)' : 'none'
+                }}
+              >
+                <Mic size={22} className={isListening ? 'pulse-mic' : ''} />
+              </button>
+
+              <div className="chat-input-wrapper" style={{ flex: 1 }}>
+                <input 
+                  type="text" 
+                  className="chat-input"
+                  placeholder={isListening ? 'Ouvindo você... Fale agora' : "Envie uma mensagem (ex: 'Marcar jantar às 21h no Rubaiyat'...)"} 
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  disabled={isSendingChat || isListening}
+                />
+                <button type="submit" className="btn btn-primary chat-send-btn" disabled={isSendingChat || isListening || !inputText.trim()}>
+                  <Send size={16} />
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </section>
     );
