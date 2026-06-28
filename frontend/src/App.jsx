@@ -612,7 +612,35 @@ function App() {
       const res = await fetch(`${BACKEND_URL}/api/auth/status`);
       const data = await res.json();
       setStatus(data.status);
-      setPreferences(data.preferences);
+      
+      let finalPrefs = data.preferences;
+      
+      // Smart Restore from localStorage backup if backend returned default/empty but we have a backup
+      const savedPrefs = localStorage.getItem('scheduleai_preferences');
+      if (savedPrefs) {
+        try {
+          const parsed = JSON.parse(savedPrefs);
+          if ((!data.preferences.homeAddress && parsed.homeAddress) || 
+              (!data.preferences.userName && parsed.userName) ||
+              (data.preferences.onboardingStep === 'welcome' && parsed.onboardingStep === 'completed')) {
+            console.log('[PREFS] Restoring preferences backup from localStorage...');
+            const restoreRes = await fetch(`${BACKEND_URL}/api/preferences`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(parsed)
+            });
+            if (restoreRes.ok) {
+              finalPrefs = await restoreRes.json();
+            }
+          }
+        } catch (e) {
+          console.error('Failed to restore preferences backup:', e);
+        }
+      }
+      
+      setPreferences(finalPrefs);
+      localStorage.setItem('scheduleai_preferences', JSON.stringify(finalPrefs));
+
       if (data.lastModelUsed) {
         setCurrentActiveModel(data.lastModelUsed);
       }
@@ -628,7 +656,7 @@ function App() {
       }
 
       // Merge local models into priority list, keeping existing priority order
-      const existingPriority = data.preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
+      const existingPriority = finalPrefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
       const mergedPriority = [...existingPriority];
       
       localModelsData.forEach(model => {
@@ -637,10 +665,13 @@ function App() {
         }
       });
 
-      setPreferences({
-        ...data.preferences,
+      const fullyMergedPrefs = {
+        ...finalPrefs,
         modelPriority: mergedPriority
-      });
+      };
+
+      setPreferences(fullyMergedPrefs);
+      localStorage.setItem('scheduleai_preferences', JSON.stringify(fullyMergedPrefs));
       return data.status;
     } catch (err) {
       console.error('Error fetching auth status:', err);
@@ -884,6 +915,7 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         setPreferences(data);
+        localStorage.setItem('scheduleai_preferences', JSON.stringify(data));
         addCustomToast('Sucesso', isAlreadyMonitored ? `Alerta de aniversário para ${name} desativado.` : `Alerta de aniversário para ${name} ativado!`, 'success');
       }
     } catch (err) {
@@ -1123,6 +1155,7 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         setPreferences(data);
+        localStorage.setItem('scheduleai_preferences', JSON.stringify(data));
         addCustomToast('Sucesso', isAlreadyFavorite ? `Tag "${tagName}" removida dos favoritos.` : `Tag "${tagName}" favoritada!`, 'success');
       }
     } catch (err) {
@@ -1235,6 +1268,7 @@ function App() {
       const res = await fetch(`${BACKEND_URL}/api/auth/disconnect`, { method: 'POST' });
       const data = await res.json();
       setStatus(data.status);
+      localStorage.removeItem('scheduleai_preferences');
       setContacts([]);
       fetchTags('');
       fetchTimeline();
@@ -1327,6 +1361,7 @@ function App() {
       });
       const data = await res.json();
       setPreferences(data);
+      localStorage.setItem('scheduleai_preferences', JSON.stringify(data));
       setIsEditingPrefs(false);
       // Re-trigger timeline calculation to update routes & travel times
       fetchTimeline();
@@ -1575,6 +1610,7 @@ function App() {
       console.log('Auth status changed:', data);
       setStatus(data.status);
       setPreferences(data.preferences);
+      localStorage.setItem('scheduleai_preferences', JSON.stringify(data.preferences));
       if (data.lastModelUsed) {
         setCurrentActiveModel(data.lastModelUsed);
       }

@@ -21,6 +21,8 @@ build/
 # Credenciais específicas da aplicação
 backend/tokens.json
 tokens.json
+backend/preferences.json
+backend/tags.json
 
 # Firebase e Ferramentas
 .firebase/
