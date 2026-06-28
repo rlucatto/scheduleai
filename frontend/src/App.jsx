@@ -2656,8 +2656,17 @@ function App() {
                               </div>
                             </div>
 
-                            {/* Row 2: Lembrar Aniversário (aligned right, directly below tags) */}
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: '6px' }}>
+                            {/* Row 2: Phone (left) and Lembrar Aniversário (right) */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '6px', minHeight: '24px' }}>
+                              {contact.phone ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                  <Phone size={12} style={{ color: 'var(--accent-hover)' }} />
+                                  <span>{contact.phone}</span>
+                                </div>
+                              ) : (
+                                <div></div>
+                              )}
+                              
                               <button 
                                 className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => handleToggleBirthdayAlert(contact)}
@@ -2680,18 +2689,12 @@ function App() {
                               </button>
                             </div>
                             
-                            {/* Row 3: Contact details (email, phone, address, birthday) */}
+                            {/* Row 3: Rest of contact details (email, address, birthday) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                               {contact.email && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <Mail size={12} style={{ color: 'var(--accent-hover)' }} />
                                   <span>{contact.email}</span>
-                                </div>
-                              )}
-                              {contact.phone && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <Phone size={12} style={{ color: 'var(--accent-hover)' }} />
-                                  <span>{contact.phone}</span>
                                 </div>
                               )}
                               {contact.address && (
