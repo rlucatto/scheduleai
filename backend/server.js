@@ -12,7 +12,8 @@ import {
   disconnectGoogle, 
   listEvents, 
   insertEvent, 
-  deleteEvent 
+  deleteEvent,
+  oauth2Client
 } from './services/calendar.js';
 import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, synthesizeSpeech } from './services/gemini.js';
 import { 
@@ -74,6 +75,16 @@ app.get('/api/auth/status', (req, res) => {
 
 app.get('/api/auth/url', (req, res) => {
   const { origin, theme } = req.query;
+  
+  if (oauth2Client) {
+    const host = req.headers.host || '';
+    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+    oauth2Client.redirectUri = isLocal 
+      ? 'http://localhost:5000/api/auth/callback' 
+      : 'https://scheduleai-hz68.onrender.com/api/auth/callback';
+    console.log(`[OAUTH] Dynamically set redirectUri to: ${oauth2Client.redirectUri}`);
+  }
+
   const stateObj = { origin: origin || '', theme: theme || 'dark' };
   const stateStr = Buffer.from(JSON.stringify(stateObj)).toString('base64');
   const url = getAuthUrl(stateStr);
@@ -89,6 +100,16 @@ app.get('/api/auth/callback', async (req, res) => {
   if (!code) {
     return res.status(400).send('Missing authorization code');
   }
+
+  if (oauth2Client) {
+    const host = req.headers.host || '';
+    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+    oauth2Client.redirectUri = isLocal 
+      ? 'http://localhost:5000/api/auth/callback' 
+      : 'https://scheduleai-hz68.onrender.com/api/auth/callback';
+    console.log(`[OAUTH] Callback set redirectUri to: ${oauth2Client.redirectUri}`);
+  }
+
   try {
     await handleAuthCode(code);
     io.emit('auth_change', { status: getAuthStatus(), preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
