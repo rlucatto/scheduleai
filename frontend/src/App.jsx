@@ -2656,7 +2656,32 @@ function App() {
                                 })}
                               </div>
                             </div>
+
+                            {/* Row 2: Lembrar Aniversário (aligned right, directly below tags) */}
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: '6px' }}>
+                              <button 
+                                className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => handleToggleBirthdayAlert(contact)}
+                                style={{ 
+                                  padding: '4px 10px', 
+                                  fontSize: '11px', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '6px',
+                                  borderRadius: '20px',
+                                  background: isMonitored ? 'rgba(235, 94, 85, 0.2)' : 'rgba(255,255,255,0.03)',
+                                  color: isMonitored ? '#eb5e55' : 'var(--text-secondary)',
+                                  border: isMonitored ? '1px solid #eb5e55' : '1px solid var(--border-color)',
+                                  height: '24px'
+                                }}
+                                title={isMonitored ? 'Alerta de Aniversário Ativo' : 'Ativar Alerta de Aniversário'}
+                              >
+                                <Cake size={11} style={{ color: isMonitored ? '#eb5e55' : 'var(--text-secondary)' }} />
+                                <span>{isMonitored ? 'Alerta Ativo' : 'Lembrar Aniversário'}</span>
+                              </button>
+                            </div>
                             
+                            {/* Row 3: Contact details (email, phone, address, birthday) */}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                               {contact.email && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2690,29 +2715,6 @@ function App() {
                                   <span>Aniversário: {contact.birthday.split('-').reverse().join('/')}</span>
                                 </div>
                               )}
-                            </div>
-
-                            {/* Actions block (Lembrar Aniversário) */}
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', width: '100%', marginTop: '12px', flexWrap: 'wrap' }}>
-                              <button 
-                                className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => handleToggleBirthdayAlert(contact)}
-                                style={{ 
-                                  padding: '6px 12px', 
-                                  fontSize: '12px', 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  gap: '6px',
-                                  borderRadius: '20px',
-                                  background: isMonitored ? 'rgba(235, 94, 85, 0.2)' : 'rgba(255,255,255,0.03)',
-                                  color: isMonitored ? '#eb5e55' : 'var(--text-secondary)',
-                                  border: isMonitored ? '1px solid #eb5e55' : '1px solid var(--border-color)',
-                                }}
-                                title={isMonitored ? 'Alerta de Aniversário Ativo' : 'Ativar Alerta de Aniversário'}
-                              >
-                                <Cake size={13} style={{ color: isMonitored ? '#eb5e55' : 'var(--text-secondary)' }} />
-                                <span>{isMonitored ? 'Alerta Ativo' : 'Lembrar Aniversário'}</span>
-                              </button>
                             </div>
                           </div>
                         </div>
