@@ -360,7 +360,7 @@ export const listGoogleContacts = async () => {
     const res = await people.people.connections.list({
       resourceName: 'people/me',
       personFields: 'names,emailAddresses,phoneNumbers,addresses,birthdays',
-      pageSize: 100
+      pageSize: 1000
     });
 
     const connections = res.data.connections || [];
