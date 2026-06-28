@@ -5,58 +5,7 @@ let mockTasks = [];
 
 // Helper to pre-populate mock tasks relative to today's date
 export const initMockTasks = () => {
-  const now = new Date();
-  
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  mockTasks = [
-    {
-      id: 'mock-task-1',
-      summary: 'Revisar Contrato da Atlas',
-      description: 'Análise das cláusulas de rescisão e multas contratuais.',
-      estimatedDuration: 90, // minutes
-      movable: true,
-      cancelable: false,
-      priority: 'high',
-      blockedBy: [],
-      context: ['computer', 'office'],
-      requiredEnergy: 'high',
-      state: 'planned',
-      scheduledTime: null,
-      deadline: tomorrow.toISOString()
-    },
-    {
-      id: 'mock-task-2',
-      summary: 'Preparar Slides para Reunião',
-      description: 'Slides sobre o roadmap do projeto e entregáveis.',
-      estimatedDuration: 60,
-      movable: true,
-      cancelable: true,
-      priority: 'medium',
-      blockedBy: ['mock-task-1'], // requires contract review first
-      context: ['computer'],
-      requiredEnergy: 'high',
-      state: 'planned',
-      scheduledTime: null,
-      deadline: tomorrow.toISOString()
-    },
-    {
-      id: 'mock-task-3',
-      summary: 'Comprar Medicamentos na Farmácia',
-      description: 'Receita médica da consulta passada.',
-      estimatedDuration: 20,
-      movable: true,
-      cancelable: true,
-      priority: 'low',
-      blockedBy: [],
-      context: ['pharmacy', 'outside'],
-      requiredEnergy: 'low',
-      state: 'planned',
-      scheduledTime: null,
-      deadline: null
-    }
-  ];
+  mockTasks = [];
 };
 
 initMockTasks();

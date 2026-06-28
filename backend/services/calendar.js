@@ -10,39 +10,7 @@ let mockEvents = [];
 
 // Helper to pre-populate mock events relative to today's date for demo purposes
 const initMockEvents = () => {
-  const now = new Date();
-  
-  // Set dinner event for 9:00 PM today
-  const dinnerStart = new Date(now);
-  dinnerStart.setHours(21, 0, 0, 0);
-  const dinnerEnd = new Date(dinnerStart);
-  dinnerEnd.setHours(23, 0, 0, 0);
-
-  // Set meeting for tomorrow at 2:00 PM
-  const meetingStart = new Date(now);
-  meetingStart.setDate(meetingStart.getDate() + 1);
-  meetingStart.setHours(14, 0, 0, 0);
-  const meetingEnd = new Date(meetingStart);
-  meetingEnd.setHours(15, 0, 0, 0);
-
-  mockEvents = [
-    {
-      id: 'mock-event-1',
-      summary: 'Jantar no Rubaiyat Faria Lima',
-      location: 'Av. Brg. Faria Lima, 2954 - Itaim Bibi, São Paulo - SP',
-      description: 'Jantar especial com a família',
-      start: { dateTime: dinnerStart.toISOString() },
-      end: { dateTime: dinnerEnd.toISOString() }
-    },
-    {
-      id: 'mock-event-2',
-      summary: 'Reunião de Alinhamento de Projeto',
-      location: 'Escritório Central (Google São Paulo)',
-      description: 'Discussão sobre o novo plano de implantação',
-      start: { dateTime: meetingStart.toISOString() },
-      end: { dateTime: meetingEnd.toISOString() }
-    }
-  ];
+  mockEvents = [];
 };
 
 initMockEvents();
