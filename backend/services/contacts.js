@@ -387,3 +387,27 @@ export const listGoogleContacts = async () => {
     return mockContacts;
   }
 };
+
+// Delete a contact
+export const deleteGoogleContact = async (resourceName) => {
+  if (process.env.TEST_MOCK_CONTACTS === 'true' || !isGoogleConnected || !oauth2Client) {
+    console.log(`[MOCK] deleteGoogleContact called for resource: "${resourceName}"`);
+    const index = mockContacts.findIndex(c => c.resourceName === resourceName);
+    if (index === -1) {
+      throw new Error(`Contato com resourceName ${resourceName} não encontrado.`);
+    }
+    mockContacts.splice(index, 1);
+    return { success: true };
+  }
+
+  const people = google.people({ version: 'v1', auth: oauth2Client });
+  try {
+    await people.people.deleteContact({
+      resourceName: resourceName
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting contact:', error);
+    throw new Error(`Falha ao excluir contato: ${error.message}`);
+  }
+};

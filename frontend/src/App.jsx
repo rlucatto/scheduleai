@@ -33,7 +33,8 @@ import {
   Mail,
   Cake,
   Tag,
-  Star
+  Star,
+  Edit2
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -218,6 +219,13 @@ function App() {
   const [birthdayModalOpen, setBirthdayModalOpen] = useState(false);
   const [birthdayContact, setBirthdayContact] = useState(null);
   const [birthdayInputValue, setBirthdayInputValue] = useState('');
+  const [editContactModalOpen, setEditContactModalOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
+  const [editFormName, setEditFormName] = useState('');
+  const [editFormPhone, setEditFormPhone] = useState('');
+  const [editFormEmail, setEditFormEmail] = useState('');
+  const [editFormAddress, setEditFormAddress] = useState('');
+  const [editFormBirthday, setEditFormBirthday] = useState('');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('medium');
@@ -948,6 +956,135 @@ function App() {
       return;
     }
     await proceedWithToggleBirthdayAlert(contact);
+  };
+
+  // Handle birthday input change with automatic date mask (DD/MM/YYYY or DD/MM) for edit form
+  const handleEditBirthdayChange = (e) => {
+    let value = e.target.value.replace(/\D/g, ''); // only digits
+    if (value.length > 8) value = value.slice(0, 8);
+    
+    let formatted = '';
+    if (value.length > 0) {
+      formatted += value.slice(0, 2);
+    }
+    if (value.length > 2) {
+      formatted += '/' + value.slice(2, 4);
+    }
+    if (value.length > 4) {
+      formatted += '/' + value.slice(4, 8);
+    }
+    setEditFormBirthday(formatted);
+  };
+
+  // Open edit contact modal
+  const handleOpenEditContactModal = (contact) => {
+    setEditingContact(contact);
+    setEditFormName(contact.name || '');
+    setEditFormPhone(contact.phone || '');
+    setEditFormEmail(contact.email || '');
+    setEditFormAddress(contact.address || '');
+    
+    // Format birthday back to DD/MM/YYYY or DD/MM for edit input
+    let displayBday = '';
+    if (contact.birthday) {
+      const parts = contact.birthday.split('-');
+      if (parts.length === 3) {
+        displayBday = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      } else if (parts.length === 2) {
+        displayBday = `${parts[1]}/${parts[0]}`;
+      }
+    }
+    setEditFormBirthday(displayBday);
+    setEditContactModalOpen(true);
+  };
+
+  // Save edited contact
+  const handleSaveContactEdit = async () => {
+    if (!editingContact) return;
+    
+    // Parse birthday formatting
+    let formattedBday = '';
+    if (editFormBirthday) {
+      const parts = editFormBirthday.trim().split('/');
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        const year = parts[2];
+        formattedBday = `${year}-${month}-${day}`;
+      } else if (parts.length === 2) {
+        const day = parts[0].padStart(2, '0');
+        const month = parts[1].padStart(2, '0');
+        formattedBday = `${month}-${day}`;
+      } else if (editFormBirthday.includes('-')) {
+        formattedBday = editFormBirthday.trim();
+      }
+      
+      const isValid = /^\d{4}-\d{2}-\d{2}$/.test(formattedBday) || /^\d{2}-\d{2}$/.test(formattedBday);
+      if (!isValid) {
+        addCustomToast('Erro', 'Formato de aniversário inválido. Use DD/MM/AAAA ou DD/MM.', 'error');
+        return;
+      }
+    }
+    
+    const contactData = {
+      name: editFormName,
+      phone: editFormPhone,
+      email: editFormEmail,
+      address: editFormAddress,
+      birthday: formattedBday
+    };
+    
+    const resourceName = editingContact.resourceName;
+    
+    setEditContactModalOpen(false);
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/contacts/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceName,
+          contactData
+        })
+      });
+      
+      if (res.ok) {
+        const updated = await res.json();
+        setContacts(prev => prev.map(c => c.resourceName === resourceName ? { ...c, ...updated } : c));
+        addCustomToast('Sucesso', 'Contato atualizado com sucesso!', 'success');
+      } else {
+        const errData = await res.json();
+        addCustomToast('Erro', `Falha ao atualizar contato: ${errData.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('Error updating contact:', err);
+      addCustomToast('Erro', 'Erro de conexão ao atualizar contato.', 'error');
+    }
+  };
+
+  // Delete a contact
+  const handleDeleteContact = async (contact) => {
+    const confirmDelete = window.confirm(`Tem certeza de que deseja excluir o contato ${contact.name}?`);
+    if (!confirmDelete) return;
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/contacts/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resourceName: contact.resourceName })
+      });
+      
+      if (res.ok) {
+        setContacts(prev => prev.filter(c => c.resourceName !== contact.resourceName));
+        addCustomToast('Sucesso', `Contato ${contact.name} excluído com sucesso!`, 'success');
+      } else {
+        const errData = await res.json();
+        addCustomToast('Erro', `Falha ao excluir contato: ${errData.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('Error deleting contact:', err);
+      addCustomToast('Erro', 'Erro de conexão ao excluir contato.', 'error');
+    }
   };
 
   // Toggle a tag as favorite in preferences
@@ -2596,9 +2733,49 @@ function App() {
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', width: '100%' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', rowGap: '4px', width: '100%' }}>
-                              <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px', flexShrink: 0, lineHeight: '1.1' }}>
-                                {contact.name}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px', flexShrink: 0, lineHeight: '1.1' }}>
+                                  {contact.name}
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', opacity: 0.6 }}>
+                                  <button
+                                    onClick={() => handleOpenEditContactModal(contact)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      padding: '2px',
+                                      cursor: 'pointer',
+                                      color: 'var(--text-secondary)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      transition: 'color 0.2s'
+                                    }}
+                                    title="Editar Contato"
+                                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--accent-hover)'}
+                                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                                  >
+                                    <Edit2 size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteContact(contact)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      padding: '2px',
+                                      cursor: 'pointer',
+                                      color: 'var(--danger)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      transition: 'color 0.2s'
+                                    }}
+                                    title="Excluir Contato"
+                                    onMouseEnter={(e) => e.currentTarget.style.color = '#ff6b6b'}
+                                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--danger)'}
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
                               
                               <button 
                                 className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
@@ -3209,6 +3386,194 @@ function App() {
                 className="btn btn-primary"
                 onClick={handleSaveBirthday}
                 disabled={!birthdayInputValue}
+                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px' }}
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Contact Modal */}
+      {editContactModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1100,
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div className="glass" style={{
+            width: '90%',
+            maxWidth: '450px',
+            borderRadius: '16px',
+            border: '1px solid var(--border-color)',
+            background: 'rgba(23, 23, 23, 0.85)',
+            boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+            padding: '24px',
+            animation: 'scaleUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit2 size={20} style={{ color: 'var(--accent-hover)' }} />
+                Editar Contato
+              </h3>
+              <button 
+                onClick={() => { setEditContactModalOpen(false); setEditingContact(null); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  lineHeight: '1',
+                  padding: '4px'
+                }}
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Nome
+                </label>
+                <input
+                  type="text"
+                  value={editFormName}
+                  onChange={(e) => setEditFormName(e.target.value)}
+                  className="input"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Telefone
+                </label>
+                <input
+                  type="text"
+                  value={editFormPhone}
+                  onChange={(e) => setEditFormPhone(e.target.value)}
+                  className="input"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  E-mail
+                </label>
+                <input
+                  type="email"
+                  value={editFormEmail}
+                  onChange={(e) => setEditFormEmail(e.target.value)}
+                  className="input"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Endereço
+                </label>
+                <input
+                  type="text"
+                  value={editFormAddress}
+                  onChange={(e) => setEditFormAddress(e.target.value)}
+                  className="input"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                  Aniversário
+                </label>
+                <input
+                  type="text"
+                  placeholder="DD/MM/AAAA ou DD/MM"
+                  value={editFormBirthday}
+                  onChange={handleEditBirthdayChange}
+                  className="input"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'var(--text-primary)',
+                    fontSize: '14px',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setEditContactModalOpen(false); setEditingContact(null); }}
+                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px' }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSaveContactEdit}
+                disabled={!editFormName}
                 style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px' }}
               >
                 Salvar
