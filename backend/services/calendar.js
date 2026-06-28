@@ -87,7 +87,7 @@ export const getAuthStatus = () => {
   };
 };
 
-export const getAuthUrl = () => {
+export const getAuthUrl = (origin) => {
   if (!oauth2Client) return null;
   const scopes = [
     'https://www.googleapis.com/auth/calendar',
@@ -97,7 +97,8 @@ export const getAuthUrl = () => {
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-    prompt: 'consent'
+    prompt: 'consent',
+    state: origin || ''
   });
 };
 

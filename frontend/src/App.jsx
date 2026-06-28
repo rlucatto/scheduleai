@@ -807,11 +807,12 @@ function App() {
   // Connect Google account
   const connectGoogle = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/url`);
+      const origin = window.location.origin;
+      const res = await fetch(`${BACKEND_URL}/api/auth/url?origin=${encodeURIComponent(origin)}`);
       const data = await res.json();
       if (data.url) {
-        // Open authorization link in a new window/tab
-        window.open(data.url, '_blank', 'width=600,height=600');
+        // Redirect directly in the same tab to prevent browser pop-up blockers
+        window.location.href = data.url;
       }
     } catch (err) {
       console.error('Error connecting Google account:', err);
@@ -820,7 +821,8 @@ function App() {
 
   const connectGoogleRedirect = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/url`);
+      const origin = window.location.origin;
+      const res = await fetch(`${BACKEND_URL}/api/auth/url?origin=${encodeURIComponent(origin)}`);
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;

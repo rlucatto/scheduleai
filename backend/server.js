@@ -66,7 +66,8 @@ app.get('/api/auth/status', (req, res) => {
 });
 
 app.get('/api/auth/url', (req, res) => {
-  const url = getAuthUrl();
+  const { origin } = req.query;
+  const url = getAuthUrl(origin);
   if (url) {
     res.json({ url });
   } else {
@@ -75,7 +76,7 @@ app.get('/api/auth/url', (req, res) => {
 });
 
 app.get('/api/auth/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   if (!code) {
     return res.status(400).send('Missing authorization code');
   }
@@ -83,10 +84,13 @@ app.get('/api/auth/callback', async (req, res) => {
     await handleAuthCode(code);
     io.emit('auth_change', { status: getAuthStatus(), preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
     
-    // Determine frontend URL dynamically (local vs production)
-    const host = req.headers.host || '';
-    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
-    const frontendUrl = isLocal ? 'http://localhost:5173' : 'https://scheduleai-rlucatto.web.app';
+    // Determine frontend URL dynamically (from state, local host fallback, or production)
+    let frontendUrl = state || 'https://scheduleai-rlucatto.web.app';
+    if (!state) {
+      const host = req.headers.host || '';
+      const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+      frontendUrl = isLocal ? 'http://localhost:5175' : 'https://scheduleai-rlucatto.web.app';
+    }
 
     // Redirect back or close popup
     res.send(`
