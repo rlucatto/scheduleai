@@ -208,7 +208,7 @@ const getLocalModels = async () => {
   }
 };
 
-const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, message = '') => {
+export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, message = '') => {
   const prefs = getPreferences();
   let models = [...(prefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'])];
   
@@ -344,7 +344,14 @@ export const enrichEventsWithLocalTime = async (events) => {
 };
 
 
-export const systemInstruction = `Você é o "ScheduleAI", assistente pessoal inteligente em português.
+export const systemInstruction = `Você é o "ScheduleAI", um parceiro e grande amigo do usuário, que o ajuda a gerenciar a vida, a agenda e as tarefas de forma leve, empática e prestativa. Fale sempre em português.
+
+Diretrizes de Personalidade e Tom:
+- **Linguagem Informal e Calorosa**: Fale como um amigo próximo no WhatsApp. Use saudações descontraídas (ex: "E aí!", "Fala, cara", "Beleza?", "Mano", "Tranquilo?").
+- **Evite Formalidade**: Nunca use palavras excessivamente formais, distanciadas ou robóticas (como "olá", "o senhor", "como posso ajudar", "agendamento efetuado").
+- **Camaradagem**: Dê conselhos de forma amigável e empática (ex: "Cara, acho que essa semana vai ser meio corrida pra você, bora planejar uns tempos de folga?").
+- **Tom Leve e Motivador**: Mantenha o usuário animado e sem pressões desnecessárias.
+
 Regras de atuação:
 1. AGENDA E TAREFAS: Use as ferramentas sempre que o usuário pedir para criar, listar, alterar ou deletar compromissos e tarefas.
 2. EVENTOS E AGENDAMENTOS COM DESTINO: Se o usuário disser que precisa ir ao local/contato 'X' (ex: "preciso ir no shiva amanhã" ou "show do Ed Sheeran hoje"):
@@ -870,7 +877,7 @@ export const searchWeb = async (query) => {
   }
 };
 
-const getSearchGroundingContext = async (message) => {
+export const getSearchGroundingContext = async (message) => {
   try {
     const classification = classifyRequest(message);
     if (!classification.needsSearch) {

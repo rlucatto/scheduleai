@@ -6,17 +6,17 @@ let schedulerInterval = null;
 
 // User settings (mutable via API)
 let userPreferences = {
-  origin: 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP',
-  homeAddress: 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP',
-  workAddress: 'Avenida Brigadeiro Faria Lima, 3477 - Itaim Bibi, São Paulo - SP',
-  transportMode: 'driving',
+  origin: '',
+  homeAddress: '',
+  workAddress: '',
+  transportMode: '',
   prepTimeMinutes: 60, // time before departure to get ready
   leadTimeMinutes: 15,  // time before departure to warn
   advanceArrivalMinutes: 15, // arrive 15 minutes early by default
   modelPriority: ['gemini-2.5-flash', 'gemini-2.0-flash'], // priority list of models
   ttsMode: 'gemini', // tts mode: gemini or browser
   ttsVoice: 'Puck', // TTS voice preference
-  hobbies: 'jogos, concertos, filmes, restaurantes',
+  hobbies: '',
   birthdayAlerts: ''
 };
 

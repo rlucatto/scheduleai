@@ -27,7 +27,11 @@ import {
   VolumeX,
   Heart,
   Gift,
-  CheckSquare
+  CheckSquare,
+  Users,
+  Phone,
+  Mail,
+  Cake
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -121,11 +125,30 @@ const renderFormattedMessage = (text) => {
   });
 };
 
-const BACKEND_URL = localStorage.getItem('backend_url') || 'https://scheduleai-hz68.onrender.com';
+const getBackendUrl = () => {
+  const saved = localStorage.getItem('backend_url');
+  if (saved) return saved;
+  
+  const hostname = window.location.hostname;
+  const protocol = window.location.protocol;
+  if (
+    hostname === 'localhost' || 
+    hostname === '127.0.0.1' || 
+    hostname.startsWith('192.168.') || 
+    hostname.startsWith('10.') || 
+    hostname.startsWith('172.')
+  ) {
+    return `${protocol}//${hostname}:5000`;
+  }
+  
+  return 'https://scheduleai-hz68.onrender.com';
+};
+
+const BACKEND_URL = getBackendUrl();
 
 function App() {
   const [backendUrlInput, setBackendUrlInput] = useState(() => {
-    return localStorage.getItem('backend_url') || 'https://scheduleai-hz68.onrender.com';
+    return localStorage.getItem('backend_url') || BACKEND_URL;
   });
   const [connectionTestStatus, setConnectionTestStatus] = useState('idle');
 
@@ -181,6 +204,9 @@ function App() {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [activeSecondTab, setActiveSecondTab] = useState('agenda');
   const [tasks, setTasks] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('medium');
@@ -638,6 +664,76 @@ function App() {
     }
   };
 
+  // Helper to show custom toasts
+  const addCustomToast = (title, message, type = 'info') => {
+    const notif = {
+      id: `notification-${Date.now()}`,
+      type,
+      title,
+      message,
+      timestamp: new Date().toISOString()
+    };
+    setToasts(prev => [notif, ...prev]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== notif.id));
+    }, 5000);
+  };
+
+  // Fetch contacts
+  const fetchContacts = async () => {
+    setIsLoadingContacts(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/contacts`);
+      if (res.ok) {
+        const data = await res.json();
+        setContacts(data);
+      }
+    } catch (err) {
+      console.error('Error fetching contacts:', err);
+    } finally {
+      setIsLoadingContacts(false);
+    }
+  };
+
+  // Toggle birthday alert status for a contact
+  const handleToggleBirthdayAlert = async (contact) => {
+    const name = contact.name;
+    const currentAlerts = preferences.birthdayAlerts || '';
+    const monitoredNames = currentAlerts.split(',').map(n => n.trim()).filter(Boolean);
+    const isAlreadyMonitored = monitoredNames.some(n => n.toLowerCase() === name.toLowerCase());
+    
+    let updatedAlertsList;
+    if (isAlreadyMonitored) {
+      updatedAlertsList = monitoredNames.filter(n => n.toLowerCase() !== name.toLowerCase());
+    } else {
+      updatedAlertsList = [...monitoredNames, name];
+    }
+    
+    const updatedAlertsString = updatedAlertsList.join(', ');
+    const updatedPrefs = {
+      ...preferences,
+      birthdayAlerts: updatedAlertsString
+    };
+    
+    setPreferences(updatedPrefs);
+    
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/preferences`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPrefs)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPreferences(data);
+        addCustomToast('Sucesso', isAlreadyMonitored ? `Alerta de aniversário para ${name} desativado.` : `Alerta de aniversário para ${name} ativado!`, 'success');
+      }
+    } catch (err) {
+      console.error('Error saving updated birthday alert preferences:', err);
+      addCustomToast('Erro', 'Não foi possível salvar a preferência de alerta.', 'error');
+    }
+  };
+
   // Fetch event calculations
   const fetchTimeline = async () => {
     setIsLoadingTimeline(true);
@@ -910,6 +1006,7 @@ function App() {
       const authStatus = await fetchStatus();
       await fetchTimeline();
       await fetchModelHealth();
+      await fetchContacts();
 
       // Initialize chat greeting based on first access
       const isFirstAccess = localStorage.getItem('scheduleai_first_access') === null;
@@ -954,29 +1051,68 @@ function App() {
         connectGoogleRedirect();
       }
 
+      // Helper to save coords
+      const saveOrigin = async (coords) => {
+        console.log('Saving origin coords:', coords);
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/preferences`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ origin: coords })
+          });
+          const data = await res.json();
+          setPreferences(data);
+          fetchTimeline();
+        } catch (err) {
+          console.error('Error saving geolocation as origin:', err);
+        }
+      };
+
+      // Fallback for when navigator.geolocation is not available (e.g. HTTP non-localhost) or permission denied
+      const fallbackToIpLocation = async () => {
+        console.log('Attempting IP-based geolocation fallback...');
+        try {
+          const res = await fetch('https://ipinfo.io/json');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.loc) {
+              await saveOrigin(data.loc);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('IP-based geolocation via ipinfo failed:', err);
+        }
+        
+        try {
+          const res = await fetch('https://freeipapi.com/api/json');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.latitude && data.longitude) {
+              await saveOrigin(`${data.latitude},${data.longitude}`);
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Secondary IP geolocation fallback failed:', err);
+        }
+      };
+
       // Check geolocation and save it as origin
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             const coords = `${position.coords.latitude},${position.coords.longitude}`;
-            console.log('Detected geolocation coords:', coords);
-            try {
-              const res = await fetch(`${BACKEND_URL}/api/preferences`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ origin: coords })
-              });
-              const data = await res.json();
-              setPreferences(data);
-              fetchTimeline();
-            } catch (err) {
-              console.error('Error saving geolocation as origin:', err);
-            }
+            await saveOrigin(coords);
           },
-          (err) => {
+          async (err) => {
             console.warn('Geolocation not allowed or failed:', err);
+            await fallbackToIpLocation();
           }
         );
+      } else {
+        console.warn('Geolocation not supported by this browser or context (e.g. not HTTPS).');
+        await fallbackToIpLocation();
       }
     };
 
@@ -1793,6 +1929,26 @@ function App() {
             <CheckSquare size={18} />
             Tarefas
           </button>
+          <button 
+            className={`btn-tab ${activeSecondTab === 'contacts' ? 'active' : ''}`}
+            onClick={() => { setActiveSecondTab('contacts'); fetchContacts(); }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: activeSecondTab === 'contacts' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+              borderBottom: activeSecondTab === 'contacts' ? '2px solid var(--accent-hover)' : 'none',
+              paddingBottom: '6px',
+              fontWeight: '600',
+              fontSize: '15px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <Users size={18} />
+            Contatos
+          </button>
         </div>
 
         {activeSecondTab === 'agenda' ? (
@@ -1877,7 +2033,7 @@ function App() {
               )}
             </div>
           </>
-        ) : (
+        ) : activeSecondTab === 'todo' ? (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1889,7 +2045,6 @@ function App() {
               </button>
             </div>
 
-            {/* Task Creation Form */}
             <form onSubmit={handleCreateTask} className="card glass" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '14px', margin: 0, color: 'var(--text-primary)' }}>Nova Tarefa</h3>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -1926,19 +2081,17 @@ function App() {
               </div>
             </form>
 
-            {/* Task List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {tasks.length === 0 ? (
                 <div className="card glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
                   <CheckSquare size={36} />
-                  <span>Nenhuma tarefa cadastrada.</span>
-                  <span style={{ fontSize: '12px' }}>Crie uma acima ou peça ao chat assistente!</span>
+                  <span>Nenhuma tarefa cadastrada. Crie uma acima ou peça para a IA cadastrar!</span>
                 </div>
               ) : (
                 tasks.map(task => (
-                  <div key={task.id} className="card glass" style={{ borderLeft: `4px solid ${task.priority === 'high' ? 'var(--danger)' : task.priority === 'medium' ? 'var(--warning)' : 'var(--success)'}`, opacity: task.state === 'completed' ? 0.6 : 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                  <div key={task.id} className="card glass hover-lift" style={{ padding: '16px', borderLeft: `4px solid ${task.priority === 'high' ? 'var(--danger)' : task.priority === 'medium' ? 'var(--warning)' : 'var(--success)'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                         <input 
                           type="checkbox" 
                           checked={task.state === 'completed'} 
@@ -1976,6 +2129,154 @@ function App() {
                   </div>
                 ))
               )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Users size={20} style={{ color: 'var(--accent-primary)' }} />
+                <h2 style={isMobile ? { fontSize: '18px' } : undefined}>Meus Contatos</h2>
+              </div>
+              <button className="btn btn-secondary" style={{ padding: '8px' }} onClick={fetchContacts} disabled={isLoadingContacts}>
+                <RefreshCw size={16} className={isLoadingContacts ? 'spin-anim' : ''} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <input 
+                type="text" 
+                className="form-input" 
+                placeholder="Buscar contato por nome, e-mail ou telefone..." 
+                value={contactSearchQuery}
+                onChange={e => setContactSearchQuery(e.target.value)}
+                style={{ width: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {isLoadingContacts && contacts.length === 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                  <RefreshCw size={24} className="spin-anim" style={{ color: 'var(--accent-hover)' }} />
+                </div>
+              ) : (() => {
+                const filtered = contacts.filter(contact => {
+                  const q = contactSearchQuery.toLowerCase();
+                  return (
+                    contact.name.toLowerCase().includes(q) ||
+                    (contact.email && contact.email.toLowerCase().includes(q)) ||
+                    (contact.phone && contact.phone.includes(q))
+                  );
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="card glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
+                      <Users size={36} />
+                      <span>{contacts.length === 0 ? 'Nenhum contato encontrado na agenda.' : 'Nenhum contato coincide com a busca.'}</span>
+                    </div>
+                  );
+                }
+
+                const currentAlerts = preferences.birthdayAlerts || '';
+                const monitoredNames = currentAlerts.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+
+                return filtered.map(contact => {
+                  const isMonitored = monitoredNames.includes(contact.name.toLowerCase());
+                  
+                  let mapsLink = '';
+                  if (contact.address) {
+                    mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(contact.address.trim())}`;
+                  }
+
+                  return (
+                    <div key={contact.resourceName} className="card glass hover-lift" style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                          <div style={{ 
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: '50%', 
+                            background: 'rgba(255,255,255,0.05)', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            color: 'var(--accent-hover)',
+                            border: '1px solid var(--border-color)',
+                            flexShrink: 0
+                          }}>
+                            {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>
+                              {contact.name}
+                            </div>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {contact.email && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Mail size={12} style={{ color: 'var(--accent-hover)' }} />
+                                  <span>{contact.email}</span>
+                                </div>
+                              )}
+                              {contact.phone && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Phone size={12} style={{ color: 'var(--accent-hover)' }} />
+                                  <span>{contact.phone}</span>
+                                </div>
+                              )}
+                              {contact.address && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <MapPin size={12} style={{ color: 'var(--accent-hover)', flexShrink: 0 }} />
+                                  <a 
+                                    href={mapsLink} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer" 
+                                    style={{ color: 'var(--accent-hover)', textDecoration: 'underline' }}
+                                    title="Ver no Google Maps"
+                                  >
+                                    {contact.address}
+                                  </a>
+                                </div>
+                              )}
+                              {contact.birthday && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <Cake size={12} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+                                  <span>Aniversário: {contact.birthday.split('-').reverse().join('/')}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <button 
+                            className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleToggleBirthdayAlert(contact)}
+                            style={{ 
+                              padding: '6px 12px', 
+                              fontSize: '12px', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px',
+                              borderRadius: '20px',
+                              background: isMonitored ? 'rgba(235, 94, 85, 0.2)' : 'rgba(255,255,255,0.03)',
+                              color: isMonitored ? '#eb5e55' : 'var(--text-secondary)',
+                              border: isMonitored ? '1px solid #eb5e55' : '1px solid var(--border-color)',
+                            }}
+                            title={isMonitored ? 'Alerta de Aniversário Ativo' : 'Ativar Alerta de Aniversário'}
+                          >
+                            <Cake size={13} style={{ color: isMonitored ? '#eb5e55' : 'var(--text-secondary)' }} />
+                            <span>{isMonitored ? 'Alerta Ativo' : 'Lembrar Aniversário'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </>
         )}

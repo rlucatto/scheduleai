@@ -342,3 +342,48 @@ export const updateGoogleContact = async (resourceName, contactData) => {
     throw new Error(`Falha ao atualizar contato: ${error.message}`);
   }
 };
+
+export const listGoogleContacts = async () => {
+  if (process.env.TEST_MOCK_CONTACTS === 'true' || !isGoogleConnected || !oauth2Client) {
+    console.log(`[MOCK] listGoogleContacts called`);
+    return mockContacts;
+  }
+
+  const people = google.people({ version: 'v1', auth: oauth2Client });
+  try {
+    const res = await people.people.connections.list({
+      resourceName: 'people/me',
+      personFields: 'names,emailAddresses,phoneNumbers,addresses,birthdays',
+      pageSize: 100
+    });
+
+    const connections = res.data.connections || [];
+    return connections.map(person => {
+      const name = person.names?.[0]?.displayName || 'Sem Nome';
+      const email = person.emailAddresses?.[0]?.value || '';
+      const phone = person.phoneNumbers?.[0]?.value || '';
+      const address = person.addresses?.[0]?.formattedValue || person.addresses?.[0]?.streetAddress || '';
+      
+      const bdayObj = person.birthdays?.[0]?.date;
+      let birthday = '';
+      if (bdayObj) {
+        const year = bdayObj.year || '';
+        const month = String(bdayObj.month).padStart(2, '0');
+        const day = String(bdayObj.day).padStart(2, '0');
+        birthday = year ? `${year}-${month}-${day}` : `${month}-${day}`;
+      }
+
+      return {
+        resourceName: person.resourceName,
+        name,
+        email,
+        phone,
+        address,
+        birthday
+      };
+    });
+  } catch (error) {
+    console.error('Error listing contacts, falling back to mock:', error);
+    return mockContacts;
+  }
+};

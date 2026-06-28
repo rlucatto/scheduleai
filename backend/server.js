@@ -36,6 +36,7 @@ import {
   backupPlanVersion,
   getPlanVersions
 } from './services/planning.js';
+import { listGoogleContacts } from './services/contacts.js';
 
 dotenv.config();
 
@@ -240,8 +241,9 @@ app.get('/api/assistant/proactive-greeting', async (req, res) => {
 
     const response = await executeWithFallback(async (genAIInstance, modelName) => {
       const model = genAIInstance.getGenerativeModel({ model: modelName });
-      const prompt = `Você é o ScheduleAI, um assistente de agenda e tarefas inteligente, atencioso e amigável.
+      const prompt = `Você é o ScheduleAI, um amigo e parceiro do usuário no dia a dia, ajudando de forma informal, descontraída e prestativa.
 Gere uma saudação inicial personalizada e proativa para a tela de chat do usuário.
+Use um tom de conversa super informal e amigável (ex: usando "E aí!", "Beleza?", "Mano", "Cara").
 Suas preferências atuais são:
 - Hobbies cadastrados: "${hobbies}"
 - Localização/Origem: "${city}"
@@ -252,10 +254,10 @@ Informações de trending events na região de ${cleanCity} encontradas na busca
 ${searchContext || 'Nenhum evento encontrado.'}
 
 Sua tarefa:
-Gere uma saudação curta (2 a 4 frases no máximo) com um tom amigável.
+Gere uma saudação curta (2 a 4 frases no máximo) com um tom super descontraído, informal e amigável de amigo.
 Você deve escolher UMA das seguintes abordagens proativas:
-1. Fazer perguntas pessoais simpáticas e interessantes para conhecer melhor os hobbies e preferências dele (ex: quais esportes ele pratica, se gosta de concertos, praias, restaurantes, pubs, séries, etc.) para que você possa auxiliá-lo a gerenciar o tempo de forma alinhada aos seus interesses.
-2. Sugerir 1 ou 2 eventos locais ou trending na região de ${cleanCity} ou arredores (até 50 milhas de distância) que combinem com os gostos dele ou que estejam bombando, incluindo links de mapas do Google Maps se houver endereço físico, usando o formato de link markdown [Endereço](URL) conforme as diretrizes do sistema.
+1. Fazer perguntas pessoais simpáticas e informais para conhecer melhor os hobbies e preferências dele (ex: o que ele curte fazer de bom, esportes, shows, praias, pubs, séries) para te ajudar a organizar o tempo dele.
+2. Sugerir 1 ou 2 eventos locais ou trending na região de ${cleanCity} ou arredores que combinem com os gostos dele ou que estejam bombando, incluindo links de mapas do Google Maps se houver endereço físico, usando o formato de link markdown [Endereço](URL).
 
 Responda APENAS com o texto da saudação direta para o chat (em formato Markdown de texto, sem metadados, wraps ou aspas).`;
 
@@ -267,7 +269,7 @@ Responda APENAS com o texto da saudação direta para o chat (em formato Markdow
   } catch (error) {
     console.error('[PROACTIVE GREETING] Error generating greeting:', error);
     res.json({
-      text: 'Olá! Como está o seu dia? Quais são os seus hobbies preferidos ou o que gostaria de planejar hoje? Posso também te sugerir os eventos mais badalados na sua região!'
+      text: 'E aí! Como tá o seu dia, beleza? Quais são os teus hobbies preferidos ou o que você quer planejar hoje? Posso também te sugerir os melhores rolês aqui na região, fala aí!'
     });
   }
 });
@@ -313,6 +315,16 @@ app.delete('/api/tasks/:id', (req, res) => {
   try {
     const result = deleteTask(req.params.id);
     res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6.5. Contacts Routes
+app.get('/api/contacts', async (req, res) => {
+  try {
+    const contacts = await listGoogleContacts();
+    res.json(contacts);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

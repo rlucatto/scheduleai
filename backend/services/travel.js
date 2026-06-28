@@ -15,13 +15,14 @@ const MOCK_TRAVEL_TIMES = [
 
 export const getTravelTime = async (origin, destination, mode = 'driving') => {
   const mapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  const travelMode = mode || 'driving';
 
   if (!destination) {
     return {
       durationSeconds: 0,
       distanceText: '0 km',
       durationText: '0 mins',
-      mode,
+      mode: travelMode,
       isMock: true
     };
   }
@@ -35,7 +36,7 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
           params: {
             origin: origin || 'São Paulo, SP',
             destination,
-            mode,
+            mode: travelMode,
             key: mapsKey
           }
         }
@@ -49,7 +50,7 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
           durationText: leg.duration.text,
           originAddress: leg.start_address,
           destinationAddress: leg.end_address,
-          mode,
+          mode: travelMode,
           isMock: false
         };
       }
@@ -72,7 +73,7 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
       durationText: matched.durationText,
       originAddress: origin || 'Minha Localização',
       destinationAddress: destination,
-      mode,
+      mode: travelMode,
       isMock: true
     };
   }
@@ -89,7 +90,7 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
     durationText: `${durationMin} mins`,
     originAddress: origin || 'Minha Localização',
     destinationAddress: destination,
-    mode,
+    mode: travelMode,
     isMock: true
   };
 };
