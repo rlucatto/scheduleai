@@ -2556,22 +2556,6 @@ function App() {
                     <div key={contact.resourceName} className="card glass hover-lift" style={{ padding: '16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', width: '100%' }}>
-                          <div style={{ 
-                            width: '40px', 
-                            height: '40px', 
-                            borderRadius: '50%', 
-                            background: 'rgba(255,255,255,0.05)', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center',
-                            fontSize: '16px',
-                            fontWeight: 'bold',
-                            color: 'var(--accent-hover)',
-                            border: '1px solid var(--border-color)',
-                            flexShrink: 0
-                          }}>
-                            {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
-                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', rowGap: '4px', width: '100%' }}>
                               <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px', flexShrink: 0 }}>
