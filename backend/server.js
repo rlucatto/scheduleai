@@ -415,9 +415,9 @@ app.post('/api/auth/save-tokens', async (req, res) => {
   }
 });
 
-app.post('/api/auth/disconnect', (req, res) => {
-  disconnectGoogle();
-  setPreferences({
+app.post('/api/auth/disconnect', async (req, res) => {
+  await disconnectGoogle();
+  await setPreferences({
     userName: '',
     agentName: 'ScheduleAI',
     userBirthday: '',
@@ -473,8 +473,8 @@ app.get('/api/models/health/*', async (req, res) => {
   }
 });
 
-app.post('/api/preferences', (req, res) => {
-  const updated = setPreferences(req.body);
+app.post('/api/preferences', async (req, res) => {
+  const updated = await setPreferences(req.body);
   res.json(updated);
 });
 
@@ -542,7 +542,7 @@ app.get('/api/assistant/proactive-greeting', async (req, res) => {
     // Check if onboarding is active
     if (!prefs.onboardingStep || prefs.onboardingStep === 'welcome') {
       const welcomeMessage = `E aí! Eu sou o **ScheduleAI**, seu parceiro de organização inteligente. Estou aqui para te ajudar com seus compromissos, tarefas e tempos de deslocamento.\n\nPara a gente se conhecer melhor, como você prefere ser chamado (seu nome ou apelido)?`;
-      setPreferences({ onboardingStep: 'ask_username' });
+      await setPreferences({ onboardingStep: 'ask_username' });
       return res.json({ text: welcomeMessage });
     } else if (prefs.onboardingStep !== 'completed') {
       const stepPrompts = {
@@ -661,10 +661,10 @@ app.get('/api/contacts', async (req, res) => {
     const contacts = await listGoogleContacts();
     
     // Enrich each contact with its tags
-    const enriched = contacts.map(c => ({
+    const enriched = await Promise.all(contacts.map(async c => ({
       ...c,
-      tags: getContactTags(c.resourceName, email)
-    }));
+      tags: await getContactTags(c.resourceName, email)
+    })));
     
     res.json(enriched);
   } catch (error) {
@@ -693,49 +693,49 @@ app.post('/api/contacts/delete', async (req, res) => {
 });
 
 // Tags endpoints
-app.get('/api/tags', (req, res) => {
+app.get('/api/tags', async (req, res) => {
   try {
     const { email } = req.query;
-    const tags = getVisibleTags(email);
+    const tags = await getVisibleTags(email);
     res.json(tags);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/tags', (req, res) => {
+app.post('/api/tags', async (req, res) => {
   try {
     const { name, type, email } = req.body;
     if (!name) {
       return res.status(400).json({ error: 'Name is required' });
     }
-    const tags = addTag(name, type, email);
+    const tags = await addTag(name, type, email);
     res.json(tags);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.delete('/api/tags', (req, res) => {
+app.delete('/api/tags', async (req, res) => {
   try {
     const { name, email } = req.query;
     if (!name) {
       return res.status(400).json({ error: 'Name query parameter is required' });
     }
-    const tags = deleteTag(name, email);
+    const tags = await deleteTag(name, email);
     res.json(tags);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/contacts/tags', (req, res) => {
+app.post('/api/contacts/tags', async (req, res) => {
   try {
     const { resourceName, tags, email } = req.body;
     if (!resourceName) {
       return res.status(400).json({ error: 'resourceName is required' });
     }
-    const updatedTags = updateContactTags(resourceName, tags || [], email);
+    const updatedTags = await updateContactTags(resourceName, tags || [], email);
     res.json({ resourceName, tags: updatedTags });
   } catch (error) {
     res.status(500).json({ error: error.message });

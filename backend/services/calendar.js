@@ -3,6 +3,8 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
+import { getDBTokens, saveDBTokens, deleteDBTokens } from './db.js';
+
 dotenv.config();
 
 // Simple in-memory mock store for calendar events when OAuth is not configured
@@ -14,8 +16,6 @@ const initMockEvents = () => {
 };
 
 initMockEvents();
-
-const TOKENS_PATH = path.join(process.cwd(), 'tokens.json');
 
 // Initialize Google OAuth2 client
 export const oauth2Client = (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
@@ -43,15 +43,14 @@ const fetchUserEmail = async () => {
 };
 
 // Auto-load persisted tokens on startup
-const loadPersistedTokens = () => {
-  if (oauth2Client && fs.existsSync(TOKENS_PATH)) {
+const loadPersistedTokens = async () => {
+  if (oauth2Client) {
     try {
-      const tokensData = fs.readFileSync(TOKENS_PATH, 'utf8');
-      const tokens = JSON.parse(tokensData);
+      const tokens = await getDBTokens();
       if (tokens && Object.keys(tokens).length > 0) {
         oauth2Client.setCredentials(tokens);
         isGoogleConnected = true;
-        console.log('[OAUTH] Automatically loaded persisted Google Calendar tokens from tokens.json.');
+        console.log('[OAUTH] Automatically loaded persisted Google Calendar tokens.');
         fetchUserEmail(); // load email asynchronously
       }
     } catch (err) {
@@ -95,8 +94,8 @@ export const handleAuthCode = async (code) => {
   
   // Persist tokens
   try {
-    fs.writeFileSync(TOKENS_PATH, JSON.stringify(tokens, null, 2), 'utf8');
-    console.log('[OAUTH] Google Calendar tokens persisted to tokens.json.');
+    await saveDBTokens(tokens);
+    console.log('[OAUTH] Google Calendar tokens persisted to database.');
   } catch (err) {
     console.error('[OAUTH] Failed to persist tokens:', err.message);
   }
@@ -111,8 +110,8 @@ export const saveTokens = async (tokens) => {
   isGoogleConnected = true;
   
   try {
-    fs.writeFileSync(TOKENS_PATH, JSON.stringify(tokens, null, 2), 'utf8');
-    console.log('[OAUTH] Google Calendar tokens saved manually to tokens.json.');
+    await saveDBTokens(tokens);
+    console.log('[OAUTH] Google Calendar tokens saved manually to database.');
   } catch (err) {
     console.error('[OAUTH] Failed to persist manual tokens:', err.message);
   }
@@ -121,19 +120,17 @@ export const saveTokens = async (tokens) => {
   return getAuthStatus();
 };
 
-export const disconnectGoogle = () => {
+export const disconnectGoogle = async () => {
   if (oauth2Client) {
     oauth2Client.setCredentials(null);
   }
   isGoogleConnected = false;
   currentUserEmail = null;
   
-  // Remove persisted tokens file
+  // Remove persisted tokens
   try {
-    if (fs.existsSync(TOKENS_PATH)) {
-      fs.unlinkSync(TOKENS_PATH);
-      console.log('[OAUTH] Persisted Google Calendar tokens deleted.');
-    }
+    await deleteDBTokens();
+    console.log('[OAUTH] Persisted Google Calendar tokens deleted.');
   } catch (err) {
     console.error('[OAUTH] Failed to delete persisted tokens:', err.message);
   }

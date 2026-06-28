@@ -1,9 +1,6 @@
 import { listEvents, getAuthStatus } from './calendar.js';
 import { getTravelTime } from './travel.js';
-import fs from 'fs';
-import path from 'path';
-
-const PREFS_FILE = path.join(process.cwd(), 'preferences.json');
+import { getDBPreferences, saveDBPreferences } from './db.js';
 
 let ioInstance = null;
 let schedulerInterval = null;
@@ -32,15 +29,13 @@ const defaultPreferences = {
 let userPreferences = { ...defaultPreferences };
 
 // Load persisted preferences
-const loadPreferences = () => {
-  if (fs.existsSync(PREFS_FILE)) {
-    try {
-      const content = fs.readFileSync(PREFS_FILE, 'utf8');
-      userPreferences = { ...defaultPreferences, ...JSON.parse(content) };
-      console.log('[PREFS] Preferences loaded successfully from preferences.json.');
-    } catch (err) {
-      console.error('[PREFS] Error reading preferences.json:', err.message);
-    }
+// Load persisted preferences
+const loadPreferences = async () => {
+  try {
+    userPreferences = await getDBPreferences(defaultPreferences);
+    console.log('[PREFS] Preferences loaded successfully.');
+  } catch (err) {
+    console.error('[PREFS] Error loading preferences:', err.message);
   }
 };
 
@@ -50,13 +45,13 @@ loadPreferences();
 // format: { "event-id-prep": true, "event-id-leave": true }
 const firedNotifications = new Set();
 
-export const setPreferences = (newPrefs) => {
+export const setPreferences = async (newPrefs) => {
   userPreferences = { ...userPreferences, ...newPrefs };
   try {
-    fs.writeFileSync(PREFS_FILE, JSON.stringify(userPreferences, null, 2), 'utf8');
-    console.log('[PREFS] Preferences saved successfully to preferences.json.');
+    await saveDBPreferences(userPreferences);
+    console.log('[PREFS] Preferences saved successfully.');
   } catch (err) {
-    console.error('[PREFS] Error writing preferences.json:', err.message);
+    console.error('[PREFS] Error writing preferences:', err.message);
   }
   if (ioInstance) {
     ioInstance.emit('auth_change', {

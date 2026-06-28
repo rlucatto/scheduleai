@@ -1,7 +1,4 @@
-import fs from 'fs';
-import path from 'path';
-
-const TAGS_FILE = path.join(process.cwd(), 'tags.json');
+import { getDBTags, saveDBTags } from './db.js';
 
 // Default state
 const defaultState = {
@@ -14,31 +11,18 @@ const defaultState = {
   associations: [] // array of { contactId, tagName, email }
 };
 
-// Load tags from file
-const loadTagsData = () => {
-  if (fs.existsSync(TAGS_FILE)) {
-    try {
-      const content = fs.readFileSync(TAGS_FILE, 'utf8');
-      return JSON.parse(content);
-    } catch (err) {
-      console.error('[TAGS] Error reading tags.json:', err.message);
-      return defaultState;
-    }
-  }
-  return defaultState;
+// Load tags
+const loadTagsData = async () => {
+  return await getDBTags(defaultState);
 };
 
-// Save tags to file
-const saveTagsData = (data) => {
-  try {
-    fs.writeFileSync(TAGS_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (err) {
-    console.error('[TAGS] Error writing tags.json:', err.message);
-  }
+// Save tags
+const saveTagsData = async (data) => {
+  await saveDBTags(data);
 };
 
-export const getVisibleTags = (email) => {
-  const data = loadTagsData();
+export const getVisibleTags = async (email) => {
+  const data = await loadTagsData();
   const lowerEmail = (email || '').toLowerCase();
   return data.tags.filter(tag => {
     if (tag.type === 'global') return true;
@@ -46,8 +30,8 @@ export const getVisibleTags = (email) => {
   });
 };
 
-export const addTag = (name, type, email) => {
-  const data = loadTagsData();
+export const addTag = async (name, type, email) => {
+  const data = await loadTagsData();
   const lowerEmail = (email || '').toLowerCase();
   const isAdmin = lowerEmail === 'rafael.lucatto@gmail.com';
   
@@ -55,7 +39,8 @@ export const addTag = (name, type, email) => {
   const finalType = isAdmin ? type : 'private';
   
   // Check if tag already exists in visible scope
-  const exists = data.tags.some(tag => {
+  const visibleTags = await getVisibleTags(email);
+  const exists = visibleTags.some(tag => {
     if (tag.name.toLowerCase() !== name.toLowerCase()) return false;
     if (tag.type === 'global' && finalType === 'global') return true;
     return tag.owner.toLowerCase() === lowerEmail;
@@ -73,16 +58,16 @@ export const addTag = (name, type, email) => {
   };
   
   data.tags.push(newTag);
-  saveTagsData(data);
-  return getVisibleTags(email);
+  await saveTagsData(data);
+  return await getVisibleTags(email);
 };
 
-export const getContactTags = (contactId, email) => {
-  const data = loadTagsData();
+export const getContactTags = async (contactId, email) => {
+  const data = await loadTagsData();
   const lowerEmail = (email || '').toLowerCase();
   
   // Find visible tags first
-  const visibleTags = getVisibleTags(email);
+  const visibleTags = await getVisibleTags(email);
   const visibleTagNames = new Set(visibleTags.map(t => t.name.toLowerCase()));
   
   // Filter associations for this contact
@@ -98,12 +83,12 @@ export const getContactTags = (contactId, email) => {
     .map(a => a.tagName);
 };
 
-export const updateContactTags = (contactId, tags, email) => {
-  const data = loadTagsData();
+export const updateContactTags = async (contactId, tags, email) => {
+  const data = await loadTagsData();
   const lowerEmail = (email || '').toLowerCase();
   
   // Remove existing associations of visible tags for this contact and user
-  const visibleTags = getVisibleTags(email);
+  const visibleTags = await getVisibleTags(email);
   const visibleTagNames = new Set(visibleTags.map(t => t.name.toLowerCase()));
   
   data.associations = data.associations.filter(a => {
@@ -125,12 +110,12 @@ export const updateContactTags = (contactId, tags, email) => {
     });
   });
   
-  saveTagsData(data);
-  return getContactTags(contactId, email);
+  await saveTagsData(data);
+  return await getContactTags(contactId, email);
 };
 
-export const deleteTag = (tagName, email) => {
-  const data = loadTagsData();
+export const deleteTag = async (tagName, email) => {
+  const data = await loadTagsData();
   const lowerEmail = (email || '').toLowerCase();
   const isAdmin = lowerEmail === 'rafael.lucatto@gmail.com';
   
@@ -151,6 +136,6 @@ export const deleteTag = (tagName, email) => {
   // Clean up contact tag associations for the deleted tag
   data.associations = data.associations.filter(a => a.tagName.toLowerCase() !== tagName.toLowerCase());
   
-  saveTagsData(data);
-  return getVisibleTags(email);
+  await saveTagsData(data);
+  return await getVisibleTags(email);
 };

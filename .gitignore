@@ -23,6 +23,8 @@ backend/tokens.json
 tokens.json
 backend/preferences.json
 backend/tags.json
+backend/firebase-key.json
+firebase-key.json
 
 # Firebase e Ferramentas
 .firebase/
