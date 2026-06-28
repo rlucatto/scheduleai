@@ -40,6 +40,7 @@ import { listGoogleContacts, updateGoogleContact } from './services/contacts.js'
 import {
   getVisibleTags,
   addTag,
+  deleteTag,
   getContactTags,
   updateContactTags
 } from './services/tags.js';
@@ -625,6 +626,19 @@ app.post('/api/tags', (req, res) => {
     res.json(tags);
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/tags', (req, res) => {
+  try {
+    const { name, email } = req.query;
+    if (!name) {
+      return res.status(400).json({ error: 'Name query parameter is required' });
+    }
+    const tags = deleteTag(name, email);
+    res.json(tags);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

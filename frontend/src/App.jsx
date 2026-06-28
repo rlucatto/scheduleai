@@ -746,6 +746,31 @@ function App() {
     return null;
   };
 
+  // Delete a tag
+  const handleDeleteTag = async (tagName) => {
+    if (!window.confirm(`Tem certeza de que deseja excluir a tag "${tagName}"?`)) {
+      return;
+    }
+    try {
+      const email = status.userEmail || '';
+      const res = await fetch(`${BACKEND_URL}/api/tags?name=${encodeURIComponent(tagName)}&email=${encodeURIComponent(email)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllTags(data);
+        addCustomToast('Sucesso', `Tag "${tagName}" excluída com sucesso!`, 'success');
+        fetchContacts();
+      } else {
+        const errData = await res.json();
+        addCustomToast('Erro', errData.error || 'Não foi possível excluir a tag.', 'error');
+      }
+    } catch (err) {
+      console.error('Error deleting tag:', err);
+      addCustomToast('Erro', 'Erro ao excluir a tag.', 'error');
+    }
+  };
+
   // Toggle a tag association for a contact
   const handleToggleContactTag = async (contact, tagName) => {
     const email = status.userEmail || '';
@@ -2973,16 +2998,40 @@ function App() {
                               {tag.name}
                             </span>
                           </div>
-                          <span style={{ 
-                            fontSize: '11px', 
-                            background: tag.type === 'global' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(33, 150, 243, 0.15)',
-                            color: tag.type === 'global' ? '#4caf50' : '#2196f3',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontWeight: '600'
-                          }}>
-                            {tag.type === 'global' ? 'Global' : 'Privada 🔒'}
-                          </span>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ 
+                              fontSize: '11px', 
+                              background: tag.type === 'global' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(33, 150, 243, 0.15)',
+                              color: tag.type === 'global' ? '#4caf50' : '#2196f3',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontWeight: '600'
+                            }}>
+                              {tag.type === 'global' ? 'Global' : 'Privada 🔒'}
+                            </span>
+                            {(status.userEmail === 'rafael.lucatto@gmail.com' || (tag.owner && tag.owner.toLowerCase() === (status.userEmail || '').toLowerCase())) && (
+                              <button
+                                onClick={() => handleDeleteTag(tag.name)}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '4px',
+                                  color: 'var(--danger)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'color 0.2s ease',
+                                  opacity: 0.7
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                                title="Excluir Tag"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })

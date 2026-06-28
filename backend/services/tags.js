@@ -127,3 +127,29 @@ export const updateContactTags = (contactId, tags, email) => {
   saveTagsData(data);
   return getContactTags(contactId, email);
 };
+
+export const deleteTag = (tagName, email) => {
+  const data = loadTagsData();
+  const lowerEmail = (email || '').toLowerCase();
+  const isAdmin = lowerEmail === 'rafael.lucatto@gmail.com';
+  
+  const tagIndex = data.tags.findIndex(t => t.name.toLowerCase() === tagName.toLowerCase());
+  if (tagIndex === -1) {
+    throw new Error(`Tag "${tagName}" não encontrada.`);
+  }
+  
+  const tag = data.tags[tagIndex];
+  
+  // Admin can delete any tag. Private tags can be deleted by their owners.
+  if (!isAdmin && tag.owner.toLowerCase() !== lowerEmail) {
+    throw new Error('Você não tem permissão para excluir esta tag.');
+  }
+  
+  data.tags.splice(tagIndex, 1);
+  
+  // Clean up contact tag associations for the deleted tag
+  data.associations = data.associations.filter(a => a.tagName.toLowerCase() !== tagName.toLowerCase());
+  
+  saveTagsData(data);
+  return getVisibleTags(email);
+};
