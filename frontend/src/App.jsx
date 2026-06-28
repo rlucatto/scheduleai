@@ -2169,7 +2169,7 @@ function App() {
                     (contact.email && contact.email.toLowerCase().includes(q)) ||
                     (contact.phone && contact.phone.includes(q))
                   );
-                });
+                }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
                 if (filtered.length === 0) {
                   return (
