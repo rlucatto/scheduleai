@@ -2493,32 +2493,6 @@ function App() {
                         </div>
 
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <button 
-                            className="btn btn-secondary"
-                            onClick={() => {
-                              if (editingContactResourceName === contact.resourceName) {
-                                setEditingContactResourceName(null);
-                              } else {
-                                setEditingContactResourceName(contact.resourceName);
-                                setNewTagNameInput('');
-                              }
-                            }}
-                            style={{ 
-                              padding: '6px 12px', 
-                              fontSize: '12px', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '6px',
-                              borderRadius: '20px',
-                              background: editingContactResourceName === contact.resourceName ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255,255,255,0.03)',
-                              color: 'var(--text-secondary)',
-                              border: '1px solid var(--border-color)',
-                            }}
-                            title="Gerenciar Tags"
-                          >
-                            <Tag size={13} style={{ color: 'var(--text-secondary)' }} />
-                            <span>Tags</span>
-                          </button>
 
                           {/* Favorite Tags Quick Toggles */}
                           {visibleFavoriteTagNames.map(tagName => {
@@ -2590,59 +2564,7 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Expanded Tag Editor Panel */}
-                      {editingContactResourceName === contact.resourceName && (
-                        <div style={{
-                          marginTop: '16px',
-                          paddingTop: '16px',
-                          borderTop: '1px solid var(--border-color)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '12px'
-                        }}>
-                          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                            Tags para {contact.name}:
-                          </div>
-                          
-                          {/* Available tag list */}
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            {allTags.map(tag => {
-                              const isChecked = (contact.tags || []).includes(tag.name);
-                              return (
-                                <label 
-                                  key={tag.id} 
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    background: isChecked ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.01)',
-                                    padding: '4px 10px',
-                                    borderRadius: '12px',
-                                    border: isChecked ? '1px solid var(--accent-hover)' : '1px solid var(--border-color)',
-                                    cursor: 'pointer',
-                                    fontSize: '12px',
-                                    userSelect: 'none'
-                                  }}
-                                >
-                                  <input 
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => handleToggleContactTag(contact, tag.name)}
-                                    style={{ cursor: 'pointer' }}
-                                  />
-                                  <span>{tag.name}</span>
-                                  {tag.type === 'global' ? (
-                                    <span style={{ fontSize: '9px', opacity: 0.6, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '3px' }}>Global</span>
-                                  ) : (
-                                    <span style={{ fontSize: '9px', opacity: 0.6, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '3px' }}>Privada</span>
-                                  )}
-                                </label>
-                              );
-                            })}
-                          </div>
-                          
-                        </div>
-                      )}
+
                     </div>
                   );
                 });
