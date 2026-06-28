@@ -562,6 +562,9 @@ app.get('/api/assistant/proactive-greeting', async (req, res) => {
     const cleanCity = city.split(',')[0].trim();
     const hobbies = prefs.hobbies || '';
     const birthdayAlerts = prefs.birthdayAlerts || '';
+    
+    const cleanHobbies = Array.isArray(hobbies) ? hobbies.join(', ') : hobbies;
+    const cleanBirthdayAlerts = Array.isArray(birthdayAlerts) ? birthdayAlerts.join(', ') : birthdayAlerts;
 
     // Dynamically import searching functions
     const { getSearchGroundingContext, executeWithFallback } = await import('./services/gemini.js');
@@ -576,9 +579,9 @@ app.get('/api/assistant/proactive-greeting', async (req, res) => {
 Gere uma saudação inicial personalizada e proativa para a tela de chat do usuário.
 Use um tom de conversa super informal e amigável (ex: usando "E aí!", "Beleza?", "Mano", "Cara").
 Suas preferências atuais são:
-- Hobbies cadastrados: "${hobbies}"
+- Hobbies cadastrados: "${cleanHobbies}"
 - Localização/Origem: "${city}"
-- Monitoramento de Aniversários: "${birthdayAlerts}"
+- Monitoramento de Aniversários: "${cleanBirthdayAlerts}"
 Hoje é dia ${new Date().toLocaleDateString('pt-BR')}.
 
 Informações de trending events na região de ${cleanCity} encontradas na busca (com endereços e detalhes):

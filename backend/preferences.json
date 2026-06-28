@@ -1,6 +1,6 @@
 {
-  "origin": "42.040929,-87.701922",
-  "homeAddress": "",
+  "origin": "42.040931,-87.701916",
+  "homeAddress": "1475 Avignon Ct, Highland Park, IL",
   "workAddress": "",
   "transportMode": "",
   "prepTimeMinutes": 60,
@@ -12,11 +12,26 @@
   ],
   "ttsMode": "gemini",
   "ttsVoice": "Puck",
-  "hobbies": "",
-  "birthdayAlerts": "",
+  "hobbies": [
+    "tênis",
+    "judô",
+    "academia",
+    "sair com amigos",
+    "cinema"
+  ],
+  "birthdayAlerts": [
+    "zigrid",
+    "nelcy",
+    "alvaro",
+    "guilherme",
+    "graziela",
+    "aline",
+    "anthoni",
+    "Karina ferreira"
+  ],
   "userName": "",
-  "agentName": "ScheduleAI",
-  "userBirthday": "",
-  "onboardingStep": "ask_username",
+  "agentName": "JARVIS",
+  "userBirthday": "05/05/1983",
+  "onboardingStep": "completed",
   "favoriteTags": "Amigo, Pessoal, Trabalho, Família"
 }

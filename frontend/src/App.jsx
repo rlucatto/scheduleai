@@ -850,8 +850,15 @@ function App() {
   // Helper to complete the birthday alert toggle
   const proceedWithToggleBirthdayAlert = async (contact) => {
     const name = contact.name;
-    const currentAlerts = preferences.birthdayAlerts || '';
-    const monitoredNames = currentAlerts.split(',').map(n => n.trim()).filter(Boolean);
+    let monitoredNames = [];
+    let wasArray = Array.isArray(preferences.birthdayAlerts);
+    if (preferences.birthdayAlerts) {
+      if (wasArray) {
+        monitoredNames = preferences.birthdayAlerts.map(n => n.trim()).filter(Boolean);
+      } else if (typeof preferences.birthdayAlerts === 'string') {
+        monitoredNames = preferences.birthdayAlerts.split(',').map(n => n.trim()).filter(Boolean);
+      }
+    }
     const isAlreadyMonitored = monitoredNames.some(n => n.toLowerCase() === name.toLowerCase());
     
     let updatedAlertsList;
@@ -861,10 +868,9 @@ function App() {
       updatedAlertsList = [...monitoredNames, name];
     }
     
-    const updatedAlertsString = updatedAlertsList.join(', ');
     const updatedPrefs = {
       ...preferences,
-      birthdayAlerts: updatedAlertsString
+      birthdayAlerts: wasArray ? updatedAlertsList : updatedAlertsList.join(', ')
     };
     
     setPreferences(updatedPrefs);
@@ -1845,7 +1851,7 @@ function App() {
                 <input 
                   type="text" 
                   className="form-input" 
-                  value={preferences.hobbies || ''} 
+                  value={Array.isArray(preferences.hobbies) ? preferences.hobbies.join(', ') : (preferences.hobbies || '')} 
                   onChange={e => setPreferences({...preferences, hobbies: e.target.value})}
                   placeholder="ex: jogos, shows, jazz, restaurantes, filmes"
                 />
@@ -1856,7 +1862,7 @@ function App() {
                 <input 
                   type="text" 
                   className="form-input" 
-                  value={preferences.birthdayAlerts || ''} 
+                  value={Array.isArray(preferences.birthdayAlerts) ? preferences.birthdayAlerts.join(', ') : (preferences.birthdayAlerts || '')} 
                   onChange={e => setPreferences({...preferences, birthdayAlerts: e.target.value})}
                   placeholder="ex: João Silva, Maria Santos"
                 />
@@ -2059,14 +2065,14 @@ function App() {
                 <Heart size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
                 <div>
                   <span style={{ color: 'var(--text-secondary)' }}>Hobbies: </span>
-                  <strong>{preferences.hobbies || 'Nenhum'}</strong>
+                  <strong>{Array.isArray(preferences.hobbies) ? preferences.hobbies.join(', ') : (preferences.hobbies || 'Nenhum')}</strong>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <Gift size={16} className="text-secondary" style={{ color: 'var(--accent-hover)' }} />
                 <div>
                   <span style={{ color: 'var(--text-secondary)' }}>Aniversários: </span>
-                  <strong>{preferences.birthdayAlerts || 'Nenhum'}</strong>
+                  <strong>{Array.isArray(preferences.birthdayAlerts) ? preferences.birthdayAlerts.join(', ') : (preferences.birthdayAlerts || 'Nenhum')}</strong>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -2709,8 +2715,14 @@ function App() {
                   );
                 }
 
-                const currentAlerts = preferences.birthdayAlerts || '';
-                const monitoredNames = currentAlerts.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+                let monitoredNames = [];
+                if (preferences.birthdayAlerts) {
+                  if (Array.isArray(preferences.birthdayAlerts)) {
+                    monitoredNames = preferences.birthdayAlerts.map(n => n.trim().toLowerCase()).filter(Boolean);
+                  } else if (typeof preferences.birthdayAlerts === 'string') {
+                    monitoredNames = preferences.birthdayAlerts.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+                  }
+                }
 
                 return filtered.map(contact => {
                   const isMonitored = monitoredNames.includes(contact.name.toLowerCase());

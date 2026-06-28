@@ -191,7 +191,14 @@ export const checkBirthdays = async (forceDate = null) => {
     const prefs = getPreferences();
     if (!prefs.birthdayAlerts) return;
 
-    const monitoredNames = prefs.birthdayAlerts.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+    let monitoredNames = [];
+    if (prefs.birthdayAlerts) {
+      if (Array.isArray(prefs.birthdayAlerts)) {
+        monitoredNames = prefs.birthdayAlerts.map(n => n.trim().toLowerCase()).filter(Boolean);
+      } else if (typeof prefs.birthdayAlerts === 'string') {
+        monitoredNames = prefs.birthdayAlerts.split(',').map(n => n.trim().toLowerCase()).filter(Boolean);
+      }
+    }
     if (monitoredNames.length === 0) return;
 
     const { searchGoogleContacts } = await import('./contacts.js');
