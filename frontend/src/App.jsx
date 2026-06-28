@@ -2529,37 +2529,39 @@ function App() {
                           }}>
                             {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                           </div>
-                          <div>
-                            <div style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>
-                              {contact.name}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>
+                                {contact.name}
+                              </span>
+                              
+                              {/* Contact tag badges */}
+                              {contact.tags && contact.tags.length > 0 && (
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                  {contact.tags.map(tagName => {
+                                    let bg = 'rgba(255, 255, 255, 0.05)';
+                                    let fg = 'var(--text-secondary)';
+                                    if (tagName.toLowerCase() === 'amigo') { bg = 'rgba(76, 175, 80, 0.15)'; fg = '#4caf50'; }
+                                    else if (tagName.toLowerCase() === 'pessoal') { bg = 'rgba(33, 150, 243, 0.15)'; fg = '#2196f3'; }
+                                    else if (tagName.toLowerCase() === 'trabalho') { bg = 'rgba(244, 67, 54, 0.15)'; fg = '#f44336'; }
+                                    else { bg = 'rgba(156, 39, 176, 0.15)'; fg = '#9c27b0'; }
+                                    
+                                    return (
+                                      <span key={tagName} style={{
+                                        padding: '2px 8px',
+                                        fontSize: '10px',
+                                        borderRadius: '4px',
+                                        background: bg,
+                                        color: fg,
+                                        fontWeight: '600'
+                                      }}>
+                                        {tagName}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                            
-                            {/* Contact tag badges */}
-                            {contact.tags && contact.tags.length > 0 && (
-                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
-                                {contact.tags.map(tagName => {
-                                  let bg = 'rgba(255, 255, 255, 0.05)';
-                                  let fg = 'var(--text-secondary)';
-                                  if (tagName.toLowerCase() === 'amigo') { bg = 'rgba(76, 175, 80, 0.15)'; fg = '#4caf50'; }
-                                  else if (tagName.toLowerCase() === 'pessoal') { bg = 'rgba(33, 150, 243, 0.15)'; fg = '#2196f3'; }
-                                  else if (tagName.toLowerCase() === 'trabalho') { bg = 'rgba(244, 67, 54, 0.15)'; fg = '#f44336'; }
-                                  else { bg = 'rgba(156, 39, 176, 0.15)'; fg = '#9c27b0'; }
-                                  
-                                  return (
-                                    <span key={tagName} style={{
-                                      padding: '2px 8px',
-                                      fontSize: '10px',
-                                      borderRadius: '4px',
-                                      background: bg,
-                                      color: fg,
-                                      fontWeight: '600'
-                                    }}>
-                                      {tagName}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            )}
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                               {contact.email && (
@@ -2595,82 +2597,80 @@ function App() {
                                 </div>
                               )}
                             </div>
+
+                            {/* Actions block (Quick Toggles & Lembrar Aniversário) */}
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
+                              {/* Favorite Tags Quick Toggles */}
+                              {visibleFavoriteTagNames.map(tagName => {
+                                const isAssociated = (contact.tags || []).includes(tagName);
+                                
+                                // Color scheme for active tag
+                                let activeBg = 'rgba(156, 39, 176, 0.15)';
+                                let activeFg = '#9c27b0';
+                                let activeBorder = '1px solid #9c27b0';
+                                
+                                if (tagName.toLowerCase() === 'amigo') {
+                                  activeBg = 'rgba(76, 175, 80, 0.15)';
+                                  activeFg = '#4caf50';
+                                  activeBorder = '1px solid #4caf50';
+                                } else if (tagName.toLowerCase() === 'pessoal') {
+                                  activeBg = 'rgba(33, 150, 243, 0.15)';
+                                  activeFg = '#2196f3';
+                                  activeBorder = '1px solid #2196f3';
+                                } else if (tagName.toLowerCase() === 'trabalho') {
+                                  activeBg = 'rgba(244, 67, 54, 0.15)';
+                                  activeFg = '#f44336';
+                                  activeBorder = '1px solid #f44336';
+                                }
+
+                                return (
+                                  <button
+                                    key={`quick-${tagName}`}
+                                    onClick={() => handleToggleContactTag(contact, tagName)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      fontSize: '12px',
+                                      borderRadius: '20px',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      background: isAssociated ? activeBg : 'rgba(255, 255, 255, 0.03)',
+                                      color: isAssociated ? activeFg : 'var(--text-secondary)',
+                                      border: isAssociated ? activeBorder : '1px solid var(--border-color)',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    title={isAssociated ? `Remover tag "${tagName}"` : `Adicionar tag "${tagName}"`}
+                                  >
+                                    <Star size={11} fill={isAssociated ? 'currentColor' : 'none'} style={{ color: isAssociated ? 'inherit' : 'var(--text-secondary)' }} />
+                                    <span>{tagName}</span>
+                                  </button>
+                                );
+                              })}
+
+                              <button 
+                                className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => handleToggleBirthdayAlert(contact)}
+                                style={{ 
+                                  padding: '6px 12px', 
+                                  fontSize: '12px', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '6px',
+                                  borderRadius: '20px',
+                                  background: isMonitored ? 'rgba(235, 94, 85, 0.2)' : 'rgba(255,255,255,0.03)',
+                                  color: isMonitored ? '#eb5e55' : 'var(--text-secondary)',
+                                  border: isMonitored ? '1px solid #eb5e55' : '1px solid var(--border-color)',
+                                }}
+                                title={isMonitored ? 'Alerta de Aniversário Ativo' : 'Ativar Alerta de Aniversário'}
+                              >
+                                <Cake size={13} style={{ color: isMonitored ? '#eb5e55' : 'var(--text-secondary)' }} />
+                                <span>{isMonitored ? 'Alerta Ativo' : 'Lembrar Aniversário'}</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
-
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-
-                          {/* Favorite Tags Quick Toggles */}
-                          {visibleFavoriteTagNames.map(tagName => {
-                            const isAssociated = (contact.tags || []).includes(tagName);
-                            
-                            // Color scheme for active tag
-                            let activeBg = 'rgba(156, 39, 176, 0.15)';
-                            let activeFg = '#9c27b0';
-                            let activeBorder = '1px solid #9c27b0';
-                            
-                            if (tagName.toLowerCase() === 'amigo') {
-                              activeBg = 'rgba(76, 175, 80, 0.15)';
-                              activeFg = '#4caf50';
-                              activeBorder = '1px solid #4caf50';
-                            } else if (tagName.toLowerCase() === 'pessoal') {
-                              activeBg = 'rgba(33, 150, 243, 0.15)';
-                              activeFg = '#2196f3';
-                              activeBorder = '1px solid #2196f3';
-                            } else if (tagName.toLowerCase() === 'trabalho') {
-                              activeBg = 'rgba(244, 67, 54, 0.15)';
-                              activeFg = '#f44336';
-                              activeBorder = '1px solid #f44336';
-                            }
-
-                            return (
-                              <button
-                                key={`quick-${tagName}`}
-                                onClick={() => handleToggleContactTag(contact, tagName)}
-                                style={{
-                                  padding: '6px 12px',
-                                  fontSize: '12px',
-                                  borderRadius: '20px',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  background: isAssociated ? activeBg : 'rgba(255, 255, 255, 0.03)',
-                                  color: isAssociated ? activeFg : 'var(--text-secondary)',
-                                  border: isAssociated ? activeBorder : '1px solid var(--border-color)',
-                                  transition: 'all 0.2s ease'
-                                }}
-                                title={isAssociated ? `Remover tag "${tagName}"` : `Adicionar tag "${tagName}"`}
-                              >
-                                <Star size={11} fill={isAssociated ? 'currentColor' : 'none'} style={{ color: isAssociated ? 'inherit' : 'var(--text-secondary)' }} />
-                                <span>{tagName}</span>
-                              </button>
-                            );
-                          })}
-
-                          <button 
-                            className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => handleToggleBirthdayAlert(contact)}
-                            style={{ 
-                              padding: '6px 12px', 
-                              fontSize: '12px', 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '6px',
-                              borderRadius: '20px',
-                              background: isMonitored ? 'rgba(235, 94, 85, 0.2)' : 'rgba(255,255,255,0.03)',
-                              color: isMonitored ? '#eb5e55' : 'var(--text-secondary)',
-                              border: isMonitored ? '1px solid #eb5e55' : '1px solid var(--border-color)',
-                            }}
-                            title={isMonitored ? 'Alerta de Aniversário Ativo' : 'Ativar Alerta de Aniversário'}
-                          >
-                            <Cake size={13} style={{ color: isMonitored ? '#eb5e55' : 'var(--text-secondary)' }} />
-                            <span>{isMonitored ? 'Alerta Ativo' : 'Lembrar Aniversário'}</span>
-                          </button>
-                        </div>
                       </div>
-
-
                     </div>
                   );
                 });
