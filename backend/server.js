@@ -117,6 +117,11 @@ app.get('/api/auth/callback', async (req, res) => {
       frontendUrl = isLocal ? 'http://localhost:5175' : 'https://scheduleai-rlucatto.web.app';
     }
 
+    // Ensure frontendUrl is a valid absolute HTTP/HTTPS URL to prevent relative path redirection bugs
+    if (!frontendUrl.startsWith('http://') && !frontendUrl.startsWith('https://')) {
+      frontendUrl = 'https://scheduleai-rlucatto.web.app';
+    }
+
     // Redirect back or close popup
     res.send(`
       <!DOCTYPE html>
