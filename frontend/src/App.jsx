@@ -1054,6 +1054,8 @@ function App() {
       const res = await fetch(`${BACKEND_URL}/api/auth/disconnect`, { method: 'POST' });
       const data = await res.json();
       setStatus(data.status);
+      setContacts([]);
+      fetchTags('');
       fetchTimeline();
     } catch (err) {
       console.error('Error disconnecting Google:', err);
@@ -1220,8 +1222,58 @@ function App() {
 
   // Setup WebSockets and Load Data
   useEffect(() => {
+    const handleMessage = async (e) => {
+      if (e.data && e.data.type === 'auth_success' && e.data.tokens) {
+        try {
+          const saveRes = await fetch(`${BACKEND_URL}/api/auth/save-tokens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tokens: e.data.tokens })
+          });
+          const saveResult = await saveRes.json();
+          if (saveResult.success && saveResult.status) {
+            setStatus(saveResult.status);
+            addCustomToast('Sucesso', 'Conectado com sucesso ao Google Calendar!', 'success');
+            fetchContacts(saveResult.status.userEmail);
+            fetchTags(saveResult.status.userEmail);
+            fetchTimeline();
+          }
+        } catch (err) {
+          console.error('Failed to save tokens from postMessage:', err);
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     const initData = async () => {
-      const authStatus = await fetchStatus();
+      // Check if tokens are in hash (local redirect callback fallback)
+      const hash = window.location.hash;
+      let finalAuthStatus = null;
+      if (hash && hash.startsWith('#tokens=')) {
+        const base64Tokens = hash.substring(8);
+        try {
+          const decodedTokens = JSON.parse(atob(base64Tokens));
+          // Clear hash immediately so URL is clean
+          window.history.replaceState(null, null, window.location.pathname);
+          
+          // POST tokens to backend
+          const saveRes = await fetch(`${BACKEND_URL}/api/auth/save-tokens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tokens: decodedTokens })
+          });
+          const saveResult = await saveRes.json();
+          if (saveResult.success && saveResult.status) {
+            finalAuthStatus = saveResult.status;
+            setStatus(saveResult.status);
+            addCustomToast('Sucesso', 'Conectado com sucesso ao Google Calendar!', 'success');
+          }
+        } catch (err) {
+          console.error('Failed to parse and save tokens from hash:', err);
+        }
+      }
+
+      const authStatus = finalAuthStatus || await fetchStatus();
       await fetchTimeline();
       await fetchModelHealth();
       await fetchContacts(authStatus?.userEmail || '');
@@ -1378,6 +1430,7 @@ function App() {
     });
 
     return () => {
+      window.removeEventListener('message', handleMessage);
       socket.disconnect();
     };
   }, []);

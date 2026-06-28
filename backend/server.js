@@ -13,7 +13,8 @@ import {
   listEvents, 
   insertEvent, 
   deleteEvent,
-  oauth2Client
+  oauth2Client,
+  saveTokens
 } from './services/calendar.js';
 import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, synthesizeSpeech } from './services/gemini.js';
 import { 
@@ -77,12 +78,8 @@ app.get('/api/auth/url', (req, res) => {
   const { origin, theme } = req.query;
   
   if (oauth2Client) {
-    const host = req.headers.host || '';
-    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
-    oauth2Client.redirectUri = isLocal 
-      ? 'http://localhost:5000/api/auth/callback' 
-      : 'https://scheduleai-hz68.onrender.com/api/auth/callback';
-    console.log(`[OAUTH] Dynamically set redirectUri to: ${oauth2Client.redirectUri}`);
+    oauth2Client.redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/auth/callback';
+    console.log(`[OAUTH] Using static redirectUri: ${oauth2Client.redirectUri}`);
   }
 
   const stateObj = { origin: origin || '', theme: theme || 'dark' };
@@ -102,16 +99,12 @@ app.get('/api/auth/callback', async (req, res) => {
   }
 
   if (oauth2Client) {
-    const host = req.headers.host || '';
-    const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
-    oauth2Client.redirectUri = isLocal 
-      ? 'http://localhost:5000/api/auth/callback' 
-      : 'https://scheduleai-hz68.onrender.com/api/auth/callback';
-    console.log(`[OAUTH] Callback set redirectUri to: ${oauth2Client.redirectUri}`);
+    oauth2Client.redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:5000/api/auth/callback';
+    console.log(`[OAUTH] Callback using static redirectUri: ${oauth2Client.redirectUri}`);
   }
 
   try {
-    await handleAuthCode(code);
+    const tokens = await handleAuthCode(code);
     io.emit('auth_change', { status: getAuthStatus(), preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
     
     // Decode state
@@ -142,6 +135,14 @@ app.get('/api/auth/callback', async (req, res) => {
     // Ensure frontendUrl is a valid absolute HTTP/HTTPS URL to prevent relative path redirection bugs
     if (!frontendUrl.startsWith('http://') && !frontendUrl.startsWith('https://')) {
       frontendUrl = 'https://scheduleai-rlucatto.web.app';
+    }
+
+    // If redirecting back to a localhost frontend, pass tokens in URL hash securely
+    let redirectUrl = frontendUrl;
+    const isLocalFrontend = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1') || frontendUrl.includes('192.168.');
+    if (tokens && isLocalFrontend) {
+      const tokensBase64 = Buffer.from(JSON.stringify(tokens)).toString('base64');
+      redirectUrl = `${frontendUrl}#tokens=${tokensBase64}`;
     }
 
     // Redirect back or close popup
@@ -376,11 +377,16 @@ app.get('/api/auth/callback', async (req, res) => {
           if (!isPopup) {
             subText.innerText = 'Redirecionando de volta...';
             setTimeout(() => {
-              window.location.href = "${frontendUrl}";
+              window.location.href = "${redirectUrl}";
             }, 2000);
           } else {
             subText.innerText = 'Fechando esta janela em instantes...';
             setTimeout(() => {
+              try {
+                window.opener.postMessage({ type: 'auth_success', tokens: ${JSON.stringify(tokens)} }, '*');
+              } catch (e) {
+                console.error('Failed to postMessage to opener:', e);
+              }
               window.close();
             }, 2000);
           }
@@ -391,6 +397,21 @@ app.get('/api/auth/callback', async (req, res) => {
   } catch (error) {
     console.error('Error exchanging OAuth code:', error);
     res.status(500).send(`Erro de Autenticação: ${error.message}`);
+  }
+});
+
+app.post('/api/auth/save-tokens', async (req, res) => {
+  const { tokens } = req.body;
+  if (!tokens) {
+    return res.status(400).json({ error: 'Missing tokens' });
+  }
+  try {
+    const status = await saveTokens(tokens);
+    io.emit('auth_change', { status, preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
+    res.json({ success: true, status });
+  } catch (err) {
+    console.error('[OAUTH] Failed to save tokens manually:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

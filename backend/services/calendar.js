@@ -67,7 +67,7 @@ export const getAuthStatus = () => {
     isConfigured: !!oauth2Client,
     isConnected: isGoogleConnected,
     mode: isGoogleConnected ? 'google' : 'mock',
-    userEmail: currentUserEmail || 'rafael.lucatto@gmail.com'
+    userEmail: isGoogleConnected ? (currentUserEmail || '') : ''
   };
 };
 
@@ -103,6 +103,22 @@ export const handleAuthCode = async (code) => {
   
   await fetchUserEmail();
   return tokens;
+};
+
+export const saveTokens = async (tokens) => {
+  if (!oauth2Client) throw new Error('Google OAuth credentials are not configured.');
+  oauth2Client.setCredentials(tokens);
+  isGoogleConnected = true;
+  
+  try {
+    fs.writeFileSync(TOKENS_PATH, JSON.stringify(tokens, null, 2), 'utf8');
+    console.log('[OAUTH] Google Calendar tokens saved manually to tokens.json.');
+  } catch (err) {
+    console.error('[OAUTH] Failed to persist manual tokens:', err.message);
+  }
+  
+  await fetchUserEmail();
+  return getAuthStatus();
 };
 
 export const disconnectGoogle = () => {
