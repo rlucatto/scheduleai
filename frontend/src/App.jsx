@@ -2554,8 +2554,8 @@ function App() {
 
                   return (
                     <div key={contact.resourceName} className="card glass hover-lift" style={{ padding: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', width: '100%' }}>
                           <div style={{ 
                             width: '40px', 
                             height: '40px', 
@@ -2572,86 +2572,89 @@ function App() {
                           }}>
                             {contact.name ? contact.name.charAt(0).toUpperCase() : '?'}
                           </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', rowGap: '4px' }}>
-                              <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', rowGap: '4px', width: '100%' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '15px', flexShrink: 0 }}>
                                 {contact.name}
                               </span>
                               
-                              {/* Favorite Tags Quick Toggles */}
-                              {visibleFavoriteTagNames.map(tagName => {
-                                const isAssociated = (contact.tags || []).includes(tagName);
-                                
-                                // Color scheme for active tag
-                                let activeBg = 'rgba(156, 39, 176, 0.15)';
-                                let activeFg = '#9c27b0';
-                                let activeBorder = '1px solid #9c27b0';
-                                
-                                if (tagName.toLowerCase() === 'amigo') {
-                                  activeBg = 'rgba(76, 175, 80, 0.15)';
-                                  activeFg = '#4caf50';
-                                  activeBorder = '1px solid #4caf50';
-                                } else if (tagName.toLowerCase() === 'pessoal') {
-                                  activeBg = 'rgba(33, 150, 243, 0.15)';
-                                  activeFg = '#2196f3';
-                                  activeBorder = '1px solid #2196f3';
-                                } else if (tagName.toLowerCase() === 'trabalho') {
-                                  activeBg = 'rgba(244, 67, 54, 0.15)';
-                                  activeFg = '#f44336';
-                                  activeBorder = '1px solid #f44336';
-                                } else if (tagName.toLowerCase() === 'família' || tagName.toLowerCase() === 'familia') {
-                                  activeBg = 'rgba(255, 152, 0, 0.15)';
-                                  activeFg = '#ff9800';
-                                  activeBorder = '1px solid #ff9800';
-                                }
+                              {/* Tags container aligned to the right */}
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', rowGap: '4px', justifyContent: 'flex-end', marginLeft: 'auto', alignItems: 'center' }}>
+                                {/* Favorite Tags Quick Toggles */}
+                                {visibleFavoriteTagNames.map(tagName => {
+                                  const isAssociated = (contact.tags || []).includes(tagName);
+                                  
+                                  // Color scheme for active tag
+                                  let activeBg = 'rgba(156, 39, 176, 0.15)';
+                                  let activeFg = '#9c27b0';
+                                  let activeBorder = '1px solid #9c27b0';
+                                  
+                                  if (tagName.toLowerCase() === 'amigo') {
+                                    activeBg = 'rgba(76, 175, 80, 0.15)';
+                                    activeFg = '#4caf50';
+                                    activeBorder = '1px solid #4caf50';
+                                  } else if (tagName.toLowerCase() === 'pessoal') {
+                                    activeBg = 'rgba(33, 150, 243, 0.15)';
+                                    activeFg = '#2196f3';
+                                    activeBorder = '1px solid #2196f3';
+                                  } else if (tagName.toLowerCase() === 'trabalho') {
+                                    activeBg = 'rgba(244, 67, 54, 0.15)';
+                                    activeFg = '#f44336';
+                                    activeBorder = '1px solid #f44336';
+                                  } else if (tagName.toLowerCase() === 'família' || tagName.toLowerCase() === 'familia') {
+                                    activeBg = 'rgba(255, 152, 0, 0.15)';
+                                    activeFg = '#ff9800';
+                                    activeBorder = '1px solid #ff9800';
+                                  }
 
-                                return (
-                                  <button
-                                    key={`quick-${tagName}`}
-                                    onClick={() => handleToggleContactTag(contact, tagName)}
-                                    style={{
+                                  return (
+                                    <button
+                                      key={`quick-${tagName}`}
+                                      onClick={() => handleToggleContactTag(contact, tagName)}
+                                      style={{
+                                        padding: '2px 8px',
+                                        fontSize: '11px',
+                                        borderRadius: '12px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        background: isAssociated ? activeBg : 'rgba(255, 255, 255, 0.03)',
+                                        color: isAssociated ? activeFg : 'var(--text-secondary)',
+                                        border: isAssociated ? activeBorder : '1px solid var(--border-color)',
+                                        transition: 'all 0.2s ease',
+                                        height: '22px',
+                                        lineHeight: '1'
+                                      }}
+                                      title={isAssociated ? `Remover tag "${tagName}"` : `Adicionar tag "${tagName}"`}
+                                    >
+                                      <Star size={9} fill={isAssociated ? 'currentColor' : 'none'} style={{ color: isAssociated ? 'inherit' : 'var(--text-secondary)' }} />
+                                      <span>{tagName}</span>
+                                    </button>
+                                  );
+                                })}
+
+                                {/* Custom contact tag badges (not in favorites) */}
+                                {contact.tags && contact.tags.filter(t => !favoriteNames.includes(t.toLowerCase())).map(tagName => {
+                                  let bg = 'rgba(156, 39, 176, 0.15)';
+                                  let fg = '#9c27b0';
+                                  return (
+                                    <span key={tagName} style={{
                                       padding: '2px 8px',
-                                      fontSize: '11px',
-                                      borderRadius: '12px',
-                                      cursor: 'pointer',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '4px',
-                                      background: isAssociated ? activeBg : 'rgba(255, 255, 255, 0.03)',
-                                      color: isAssociated ? activeFg : 'var(--text-secondary)',
-                                      border: isAssociated ? activeBorder : '1px solid var(--border-color)',
-                                      transition: 'all 0.2s ease',
-                                      height: '22px',
-                                      lineHeight: '1'
-                                    }}
-                                    title={isAssociated ? `Remover tag "${tagName}"` : `Adicionar tag "${tagName}"`}
-                                  >
-                                    <Star size={9} fill={isAssociated ? 'currentColor' : 'none'} style={{ color: isAssociated ? 'inherit' : 'var(--text-secondary)' }} />
-                                    <span>{tagName}</span>
-                                  </button>
-                                );
-                              })}
-
-                              {/* Custom contact tag badges (not in favorites) */}
-                              {contact.tags && contact.tags.filter(t => !favoriteNames.includes(t.toLowerCase())).map(tagName => {
-                                let bg = 'rgba(156, 39, 176, 0.15)';
-                                let fg = '#9c27b0';
-                                return (
-                                  <span key={tagName} style={{
-                                    padding: '2px 8px',
-                                    fontSize: '10px',
-                                    borderRadius: '4px',
-                                    background: bg,
-                                    color: fg,
-                                    fontWeight: '600',
-                                    display: 'inline-block',
-                                    height: '18px',
-                                    lineHeight: '14px'
-                                  }}>
-                                    {tagName}
-                                  </span>
-                                );
-                              })}
+                                      fontSize: '10px',
+                                      borderRadius: '4px',
+                                      background: bg,
+                                      color: fg,
+                                      fontWeight: '600',
+                                      display: 'inline-block',
+                                      height: '18px',
+                                      lineHeight: '14px'
+                                    }}>
+                                      {tagName}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </div>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
