@@ -688,16 +688,16 @@ function App() {
   };
 
   // Fetch contacts
-  const fetchContacts = async () => {
+  const fetchContacts = async (emailParam) => {
     setIsLoadingContacts(true);
     try {
-      const email = status.userEmail || '';
+      const email = emailParam !== undefined ? emailParam : (status.userEmail || '');
       const res = await fetch(`${BACKEND_URL}/api/contacts?email=${encodeURIComponent(email)}`);
       if (res.ok) {
         const data = await res.json();
         setContacts(data);
       }
-      await fetchTags();
+      await fetchTags(email);
     } catch (err) {
       console.error('Error fetching contacts:', err);
     } finally {
@@ -706,9 +706,9 @@ function App() {
   };
 
   // Fetch tags
-  const fetchTags = async () => {
+  const fetchTags = async (emailParam) => {
     try {
-      const email = status.userEmail || '';
+      const email = emailParam !== undefined ? emailParam : (status.userEmail || '');
       const res = await fetch(`${BACKEND_URL}/api/tags?email=${encodeURIComponent(email)}`);
       if (res.ok) {
         const data = await res.json();
@@ -1224,7 +1224,7 @@ function App() {
       const authStatus = await fetchStatus();
       await fetchTimeline();
       await fetchModelHealth();
-      await fetchContacts();
+      await fetchContacts(authStatus?.userEmail || '');
 
       // Initialize chat greeting based on first access
       const isFirstAccess = localStorage.getItem('scheduleai_first_access') === null;
