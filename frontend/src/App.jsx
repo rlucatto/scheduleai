@@ -2693,7 +2693,7 @@ function App() {
                             </div>
 
                             {/* Actions block (Lembrar Aniversário) */}
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '12px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-end', width: '100%', marginTop: '12px', flexWrap: 'wrap' }}>
                               <button 
                                 className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => handleToggleBirthdayAlert(contact)}
