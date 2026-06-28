@@ -17,6 +17,6 @@
   "userName": "",
   "agentName": "ScheduleAI",
   "userBirthday": "",
-  "onboardingStep": "welcome",
-  "favoriteTags": "Amigo"
+  "onboardingStep": "ask_username",
+  "favoriteTags": "Amigo, Pessoal, Trabalho, Família"
 }

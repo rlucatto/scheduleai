@@ -25,7 +25,8 @@ const defaultPreferences = {
   userName: '',
   agentName: 'ScheduleAI',
   userBirthday: '',
-  onboardingStep: 'welcome'
+  onboardingStep: 'welcome',
+  favoriteTags: 'Amigo, Pessoal, Trabalho, Família'
 };
 
 let userPreferences = { ...defaultPreferences };

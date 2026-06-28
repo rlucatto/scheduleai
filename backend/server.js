@@ -426,7 +426,8 @@ app.post('/api/auth/disconnect', (req, res) => {
     birthdayAlerts: '',
     origin: '',
     homeAddress: '',
-    workAddress: ''
+    workAddress: '',
+    favoriteTags: 'Amigo, Pessoal, Trabalho, Família'
   });
   res.json({ success: true, status: getAuthStatus() });
 });

@@ -8,7 +8,8 @@ const defaultState = {
   tags: [
     { id: 'tag-amigo', name: 'Amigo', type: 'global', owner: 'system' },
     { id: 'tag-pessoal', name: 'Pessoal', type: 'global', owner: 'system' },
-    { id: 'tag-trabalho', name: 'Trabalho', type: 'global', owner: 'system' }
+    { id: 'tag-trabalho', name: 'Trabalho', type: 'global', owner: 'system' },
+    { id: 'tag-familia', name: 'Família', type: 'global', owner: 'system' }
   ],
   associations: [] // array of { contactId, tagName, email }
 };

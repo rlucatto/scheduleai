@@ -2587,6 +2587,7 @@ function App() {
                                     if (tagName.toLowerCase() === 'amigo') { bg = 'rgba(76, 175, 80, 0.15)'; fg = '#4caf50'; }
                                     else if (tagName.toLowerCase() === 'pessoal') { bg = 'rgba(33, 150, 243, 0.15)'; fg = '#2196f3'; }
                                     else if (tagName.toLowerCase() === 'trabalho') { bg = 'rgba(244, 67, 54, 0.15)'; fg = '#f44336'; }
+                                    else if (tagName.toLowerCase() === 'família' || tagName.toLowerCase() === 'familia') { bg = 'rgba(255, 152, 0, 0.15)'; fg = '#ff9800'; }
                                     else { bg = 'rgba(156, 39, 176, 0.15)'; fg = '#9c27b0'; }
                                     
                                     return (
@@ -2664,6 +2665,10 @@ function App() {
                                   activeBg = 'rgba(244, 67, 54, 0.15)';
                                   activeFg = '#f44336';
                                   activeBorder = '1px solid #f44336';
+                                } else if (tagName.toLowerCase() === 'família' || tagName.toLowerCase() === 'familia') {
+                                  activeBg = 'rgba(255, 152, 0, 0.15)';
+                                  activeFg = '#ff9800';
+                                  activeBorder = '1px solid #ff9800';
                                 }
 
                                 return (
