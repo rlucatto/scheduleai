@@ -2586,7 +2586,7 @@ function App() {
                             </div>
 
                             {/* Row 2: Phone (left) and Tags (right) */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '-4px', minHeight: '24px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginTop: '2px', minHeight: '24px' }}>
                               {contact.phone ? (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                                   <Phone size={12} style={{ color: 'var(--accent-hover)' }} />
