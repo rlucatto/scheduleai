@@ -2563,7 +2563,7 @@ function App() {
                               </span>
                               
                               {/* Tags container aligned to the right */}
-                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', rowGap: '4px', justifyContent: 'flex-end', marginLeft: 'auto', alignItems: 'center' }}>
+                              <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', rowGap: '2px', justifyContent: 'flex-end', marginLeft: 'auto', alignItems: 'center' }}>
                                 {/* Favorite Tags Quick Toggles */}
                                 {visibleFavoriteTagNames.map(tagName => {
                                   const isAssociated = (contact.tags || []).includes(tagName);
