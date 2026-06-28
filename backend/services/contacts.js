@@ -313,13 +313,19 @@ export const updateGoogleContact = async (resourceName, contactData) => {
     }
 
     // 3. Perform update
-    const updateRes = await people.people.updateContact({
+    await people.people.updateContact({
       resourceName: resourceName,
       updatePersonFields: updateFields.join(','),
       requestBody: person
     });
 
-    const updatedPerson = updateRes.data;
+    // 4. Retrieve the updated contact with all fields to return it complete
+    const finalRes = await people.people.get({
+      resourceName: resourceName,
+      personFields: 'names,emailAddresses,phoneNumbers,addresses,metadata,birthdays'
+    });
+
+    const updatedPerson = finalRes.data;
     const bdayObj = updatedPerson.birthdays?.[0]?.date;
     let bdayStr = '';
     if (bdayObj) {
