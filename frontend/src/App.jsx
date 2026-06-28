@@ -2628,7 +2628,6 @@ function App() {
                                       }}
                                       title={isAssociated ? `Remover tag "${tagName}"` : `Adicionar tag "${tagName}"`}
                                     >
-                                      <Star size={9} fill={isAssociated ? 'currentColor' : 'none'} style={{ color: isAssociated ? 'inherit' : 'var(--text-secondary)' }} />
                                       <span>{tagName}</span>
                                     </button>
                                   );
