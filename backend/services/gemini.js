@@ -58,13 +58,21 @@ const apiKeys = [
   process.env.GEMINI_API_KEY_BACKUP_2
 ].filter(key => key && key !== 'your_gemini_api_key_here');
 
-const keyPool = apiKeys.map((key, idx) => ({
-  key,
-  name: idx === 0 ? 'Primary' : `Backup ${idx}`,
-  blacklistedUntil: 0
-}));
+const uniqueKeys = [];
+const keyPool = [];
+apiKeys.forEach((key) => {
+  if (!uniqueKeys.includes(key)) {
+    uniqueKeys.push(key);
+    const idx = uniqueKeys.length - 1;
+    keyPool.push({
+      key,
+      name: idx === 0 ? 'Primary' : `Backup ${idx}`,
+      blacklistedUntil: 0
+    });
+  }
+});
 
-console.log(`Gemini Key Rotator initialized with ${keyPool.length} active keys.`);
+console.log(`Gemini Key Rotator initialized with ${keyPool.length} active unique keys.`);
 
 const getGenAIClient = () => {
   const now = Date.now();
