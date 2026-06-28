@@ -215,6 +215,9 @@ function App() {
   const [newTagTypeInput, setNewTagTypeInput] = useState('private');
   const [selectedFilterTag, setSelectedFilterTag] = useState('Todos');
   const [showTagSettingsModal, setShowTagSettingsModal] = useState(false);
+  const [birthdayModalOpen, setBirthdayModalOpen] = useState(false);
+  const [birthdayContact, setBirthdayContact] = useState(null);
+  const [birthdayInputValue, setBirthdayInputValue] = useState('');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('medium');
@@ -818,63 +821,26 @@ function App() {
     }
   };
 
-  // Toggle birthday alert status for a contact
-  const handleToggleBirthdayAlert = async (contact) => {
-    if (!contact.birthday) {
-      const bdayInput = prompt(`Por favor, insira o aniversário de ${contact.name} (formato: DD/MM/AAAA ou DD/MM):`);
-      if (!bdayInput) {
-        addCustomToast('Aviso', 'Aniversário não cadastrado. É necessário um aniversário para ativar o lembrete.', 'warning');
-        return;
-      }
-      
-      const parts = bdayInput.trim().split('/');
-      let formattedBday = '';
-      if (parts.length === 3) {
-        const day = parts[0].padStart(2, '0');
-        const month = parts[1].padStart(2, '0');
-        const year = parts[2];
-        formattedBday = `${year}-${month}-${day}`;
-      } else if (parts.length === 2) {
-        const day = parts[0].padStart(2, '0');
-        const month = parts[1].padStart(2, '0');
-        formattedBday = `${month}-${day}`;
-      } else if (bdayInput.includes('-')) {
-        formattedBday = bdayInput.trim();
-      }
-      
-      const isValid = /^\d{4}-\d{2}-\d{2}$/.test(formattedBday) || /^\d{2}-\d{2}$/.test(formattedBday);
-      if (!isValid) {
-        addCustomToast('Erro', 'Formato de data inválido. Use DD/MM/AAAA ou DD/MM.', 'error');
-        return;
-      }
-      
-      try {
-        const updateRes = await fetch(`${BACKEND_URL}/api/contacts/update`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            resourceName: contact.resourceName,
-            contactData: { birthday: formattedBday }
-          })
-        });
-        
-        if (updateRes.ok) {
-          const updatedContact = await updateRes.json();
-          setContacts(prev => prev.map(c => c.resourceName === contact.resourceName ? { ...c, birthday: updatedContact.birthday } : c));
-          contact.birthday = updatedContact.birthday;
-          addCustomToast('Sucesso', 'Aniversário salvo com sucesso no Google Contacts!', 'success');
-        } else {
-          const errData = await updateRes.json();
-          addCustomToast('Erro', `Falha ao salvar o aniversário: ${errData.error}`, 'error');
-          return;
-        }
-      } catch (err) {
-        console.error('Error updating Google contact birthday:', err);
-        addCustomToast('Erro', 'Não foi possível salvar o aniversário no Google Contacts.', 'error');
-        return;
-      }
+  // Handle birthday input change with automatic date mask (DD/MM/YYYY or DD/MM)
+  const handleBirthdayInputChange = (e) => {
+    let value = e.target.value.replace(/\D/g, ''); // only digits
+    if (value.length > 8) value = value.slice(0, 8);
+    
+    let formatted = '';
+    if (value.length > 0) {
+      formatted += value.slice(0, 2);
     }
+    if (value.length > 2) {
+      formatted += '/' + value.slice(2, 4);
+    }
+    if (value.length > 4) {
+      formatted += '/' + value.slice(4, 8);
+    }
+    setBirthdayInputValue(formatted);
+  };
 
+  // Helper to complete the birthday alert toggle
+  const proceedWithToggleBirthdayAlert = async (contact) => {
     const name = contact.name;
     const currentAlerts = preferences.birthdayAlerts || '';
     const monitoredNames = currentAlerts.split(',').map(n => n.trim()).filter(Boolean);
@@ -910,6 +876,78 @@ function App() {
       console.error('Error saving updated birthday alert preferences:', err);
       addCustomToast('Erro', 'Não foi possível salvar a preferência de alerta.', 'error');
     }
+  };
+
+  // Save birthday from modal
+  const handleSaveBirthday = async () => {
+    if (!birthdayContact) return;
+    
+    const parts = birthdayInputValue.trim().split('/');
+    let formattedBday = '';
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2];
+      formattedBday = `${year}-${month}-${day}`;
+    } else if (parts.length === 2) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      formattedBday = `${month}-${day}`;
+    } else if (birthdayInputValue.includes('-')) {
+      formattedBday = birthdayInputValue.trim();
+    }
+    
+    const isValid = /^\d{4}-\d{2}-\d{2}$/.test(formattedBday) || /^\d{2}-\d{2}$/.test(formattedBday);
+    if (!isValid) {
+      addCustomToast('Erro', 'Formato de data inválido. Use DD/MM/AAAA ou DD/MM.', 'error');
+      return;
+    }
+    
+    const contactToUpdate = birthdayContact;
+    
+    // Close modal first
+    setBirthdayModalOpen(false);
+    setBirthdayContact(null);
+    setBirthdayInputValue('');
+    
+    try {
+      const updateRes = await fetch(`${BACKEND_URL}/api/contacts/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceName: contactToUpdate.resourceName,
+          contactData: { birthday: formattedBday }
+        })
+      });
+      
+      if (updateRes.ok) {
+        const updatedContact = await updateRes.json();
+        setContacts(prev => prev.map(c => c.resourceName === contactToUpdate.resourceName ? { ...c, birthday: updatedContact.birthday } : c));
+        
+        // Also toggle the alert after saving successfully
+        const updatedContactWithBirthday = { ...contactToUpdate, birthday: updatedContact.birthday };
+        await proceedWithToggleBirthdayAlert(updatedContactWithBirthday);
+        
+        addCustomToast('Sucesso', 'Aniversário salvo com sucesso no Google Contacts!', 'success');
+      } else {
+        const errData = await updateRes.json();
+        addCustomToast('Erro', `Falha ao salvar o aniversário: ${errData.error}`, 'error');
+      }
+    } catch (err) {
+      console.error('Error updating Google contact birthday:', err);
+      addCustomToast('Erro', 'Não foi possível salvar o aniversário no Google Contacts.', 'error');
+    }
+  };
+
+  // Toggle birthday alert status for a contact
+  const handleToggleBirthdayAlert = async (contact) => {
+    if (!contact.birthday) {
+      setBirthdayContact(contact);
+      setBirthdayInputValue('');
+      setBirthdayModalOpen(true);
+      return;
+    }
+    await proceedWithToggleBirthdayAlert(contact);
   };
 
   // Toggle a tag as favorite in preferences
@@ -3077,6 +3115,103 @@ function App() {
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
               <button className="btn btn-secondary" onClick={() => setShowTagSettingsModal(false)}>
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Birthday Input Modal */}
+      {birthdayModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1100,
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div className="glass" style={{
+            width: '90%',
+            maxWidth: '400px',
+            borderRadius: '16px',
+            border: '1px solid var(--border-color)',
+            background: 'rgba(23, 23, 23, 0.85)',
+            boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+            padding: '24px',
+            animation: 'scaleUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Cake size={20} style={{ color: 'var(--warning)' }} />
+                Cadastrar Aniversário
+              </h3>
+              <button 
+                onClick={() => { setBirthdayModalOpen(false); setBirthdayContact(null); }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  lineHeight: '1',
+                  padding: '4px'
+                }}
+              >
+                &times;
+              </button>
+            </div>
+            
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.4' }}>
+              Insira a data de aniversário de <strong>{birthdayContact?.name}</strong> para poder ativar os alertas.
+            </p>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                Data de Aniversário
+              </label>
+              <input
+                type="text"
+                placeholder="DD/MM/AAAA ou DD/MM"
+                value={birthdayInputValue}
+                onChange={handleBirthdayInputChange}
+                className="input"
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+                autoFocus
+              />
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setBirthdayModalOpen(false); setBirthdayContact(null); }}
+                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px' }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSaveBirthday}
+                disabled={!birthdayInputValue}
+                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px' }}
+              >
+                Salvar
               </button>
             </div>
           </div>
