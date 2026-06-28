@@ -1248,6 +1248,118 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
 
 export const chatWithAssistant = async (message, history = []) => {
   try {
+    const prefs = getPreferences();
+    const currentStep = prefs.onboardingStep || 'welcome';
+
+    if (currentStep !== 'completed') {
+      console.log(`[ONBOARDING] Intercepted message in step: "${currentStep}"`);
+      return await executeWithFallback(async (genAIInstance, modelName) => {
+        const model = genAIInstance.getGenerativeModel({ model: modelName });
+        const prompt = `Você é o "ScheduleAI", um assistente pessoal informal e amigável.
+O usuário está no fluxo de onboarding para te conhecer melhor.
+Passo atual do onboarding: "${currentStep}".
+
+Aqui estão os dados coletados até agora das preferências do usuário:
+${JSON.stringify(prefs, null, 2)}
+
+A mensagem mais recente do usuário respondendo a este passo é:
+"${message}"
+
+Sua tarefa:
+1. Extraia a informação solicitada pelo passo "${currentStep}" a partir da mensagem do usuário:
+   - Se o passo for "ask_username": Extraia o nome ou apelido com o qual o usuário quer ser chamado.
+   - Se o passo for "ask_agentname": Extraia o nome que o usuário quer dar para você (o agente).
+   - Se o passo for "ask_home": Extraia o endereço de residência do usuário.
+   - Se o passo for "ask_work": Extraia o endereço de trabalho do usuário.
+   - Se o passo for "ask_hobbies": Extraia os hobbies e interesses informados.
+   - Se o passo for "ask_birthday": Extraia a data de aniversário do usuário (seja no formato DD/MM/AAAA, DD/MM, ou texto).
+   - Se o passo for "ask_birthday_alerts": Extraia os nomes de contatos que o usuário quer que você lembre o aniversário.
+
+2. Responda obrigatoriamente em formato JSON válido contendo exatamente dois campos:
+   - "extractedValue": o valor extraído (como string ou lista, conforme apropriado).
+   - "reply": a sua resposta conversacional. A sua resposta deve agradecer informalmente a resposta e fazer a PRÓXIMA pergunta da sequência.
+     IMPORTANTE: 
+     - Faça apenas UMA pergunta por vez.
+     - Não faça várias perguntas juntas no mesmo parágrafo ou frase.
+     - Tom informal de WhatsApp, usando termos amigáveis de amigo.
+
+A sequência completa de passos e suas próximas perguntas são:
+- Após o passo "ask_username": pergunte "E como você gostaria de me chamar?" (próximo passo no fluxo: "ask_agentname").
+- Após o passo "ask_agentname": pergunte "Qual é o seu endereço de casa? Isso me ajuda a calcular seu tempo de trânsito." (próximo passo no fluxo: "ask_home").
+- Após o passo "ask_home": pergunte "E qual o endereço do seu trabalho?" (próximo passo no fluxo: "ask_work").
+- Após o passo "ask_work": pergunte "Quais são seus hobbies ou o que você mais gosta de fazer no tempo livre?" (próximo passo no fluxo: "ask_hobbies").
+- Após o passo "ask_hobbies": pergunte "Quando é o seu aniversário? (Dia e mês ou ano também se quiser)" (próximo passo no fluxo: "ask_birthday").
+- Após o passo "ask_birthday": pergunte "E por fim, quais são os nomes de contatos importantes que você quer que eu te lembre do aniversário deles? (Pode citar alguns separados por vírgula)" (próximo passo no fluxo: "ask_birthday_alerts").
+- Após o passo "ask_birthday_alerts": diga que o onboarding foi concluído com sucesso e que agora vocês estão prontos para conversar normalmente (próximo passo no fluxo: "completed").
+
+Exemplo de formato de resposta JSON:
+{
+  "extractedValue": "...",
+  "reply": "..."
+}
+
+Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer texto antes ou depois.`;
+
+        const genRes = await model.generateContent(prompt);
+        const textResponse = genRes.response.text().trim();
+        console.log("[ONBOARDING] Gemini raw response:", textResponse);
+
+        let cleanText = textResponse;
+        if (cleanText.startsWith('```')) {
+          cleanText = cleanText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+        }
+        
+        const parsed = JSON.parse(cleanText);
+        const extractedValue = parsed.extractedValue;
+        const reply = parsed.reply;
+
+        const nextSteps = {
+          'ask_username': 'ask_agentname',
+          'ask_agentname': 'ask_home',
+          'ask_home': 'ask_work',
+          'ask_work': 'ask_hobbies',
+          'ask_hobbies': 'ask_birthday',
+          'ask_birthday': 'ask_birthday_alerts',
+          'ask_birthday_alerts': 'completed'
+        };
+
+        const updateFields = {
+          'ask_username': 'userName',
+          'ask_agentname': 'agentName',
+          'ask_home': 'homeAddress',
+          'ask_work': 'workAddress',
+          'ask_hobbies': 'hobbies',
+          'ask_birthday': 'userBirthday',
+          'ask_birthday_alerts': 'birthdayAlerts'
+        };
+
+        const fieldToUpdate = updateFields[currentStep];
+        const nextStep = nextSteps[currentStep] || 'completed';
+
+        const updateData = { onboardingStep: nextStep };
+        if (fieldToUpdate) {
+          updateData[fieldToUpdate] = extractedValue;
+        }
+
+        // If saving home address, also update the origin coordinates if it's text
+        if (currentStep === 'ask_home' && extractedValue) {
+          try {
+            const { geocodeAddress } = await import('./travel.js');
+            const coords = await geocodeAddress(extractedValue);
+            if (coords) {
+              updateData.origin = coords;
+            }
+          } catch (e) {
+            console.error('[ONBOARDING] Failed to resolve coordinates for home address:', e);
+          }
+        }
+
+        setPreferences(updateData);
+
+        return { text: reply };
+      }, null, "onboarding chat response");
+    }
+
     console.log(`[AI ROUTING] Checking search needs for: "${message}"...`);
     const searchResultsContext = await getSearchGroundingContext(message);
     if (searchResultsContext) {
@@ -1259,16 +1371,19 @@ export const chatWithAssistant = async (message, history = []) => {
     return await executeWithFallback(
       // Gemini Handler
       async (genAIInstance, modelName) => {
-        const prefs = getPreferences();
         const { getTimezoneFromCoords } = await import('./travel.js');
         const userTz = await getTimezoneFromCoords(prefs.origin);
         const tzString = getTimezoneString(userTz);
         const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+        
+        const agentName = prefs.agentName || 'ScheduleAI';
+        const dynamicInstruction = systemInstruction.replace(/ScheduleAI/g, agentName) + currentRefDate + 
+            `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
+            (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '');
+
         const model = genAIInstance.getGenerativeModel({
           model: modelName,
-          systemInstruction: systemInstruction + currentRefDate + 
-            `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
-            (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '')
+          systemInstruction: dynamicInstruction
         });
 
         let formattedHistory = [];

@@ -1279,41 +1279,31 @@ function App() {
       await fetchContacts(authStatus?.userEmail || '');
 
       // Initialize chat greeting based on first access
-      const isFirstAccess = localStorage.getItem('scheduleai_first_access') === null;
-      if (isFirstAccess) {
-        setChatHistory([
-          {
-            sender: 'assistant',
-            text: 'Olá! Sou o **ScheduleAI**, seu assistente de agenda inteligente. Posso organizar seus compromissos e planejar seus alertas proativos de saída e preparação.\n\nExperimente me pedir: *"Marcar jantar hoje às 21h no Rubaiyat Faria Lima"*'
-          }
-        ]);
-        localStorage.setItem('scheduleai_first_access', 'false');
-      } else {
-        setChatHistory([
-          {
-            sender: 'assistant',
-            text: 'Olá de volta! Estou analisando seus hobbies e buscando as melhores sugestões locais e perguntas personalizadas para você...'
-          }
-        ]);
-        
-        try {
-          const res = await fetch(`${BACKEND_URL}/api/assistant/proactive-greeting`);
-          const data = await res.json();
-          setChatHistory([
-            {
-              sender: 'assistant',
-              text: data.text
-            }
-          ]);
-        } catch (err) {
-          console.error('Error fetching proactive greeting:', err);
-          setChatHistory([
-            {
-              sender: 'assistant',
-              text: 'Olá! Como está o seu dia? Quais são os seus hobbies preferidos ou o que gostaria de planejar hoje? Posso também te sugerir os eventos mais badalados na sua região!'
-            }
-          ]);
+      // Initialize chat greeting dynamically from backend proactive-greeting endpoint
+      setChatHistory([
+        {
+          sender: 'assistant',
+          text: 'Conectando ao assistente...'
         }
+      ]);
+      
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/assistant/proactive-greeting`);
+        const data = await res.json();
+        setChatHistory([
+          {
+            sender: 'assistant',
+            text: data.text
+          }
+        ]);
+      } catch (err) {
+        console.error('Error fetching proactive greeting:', err);
+        setChatHistory([
+          {
+            sender: 'assistant',
+            text: 'E aí! Como posso te ajudar hoje?'
+          }
+        ]);
       }
 
       if (authStatus && !authStatus.isConnected && authStatus.isConfigured) {

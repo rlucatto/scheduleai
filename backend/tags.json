@@ -1,0 +1,29 @@
+{
+  "tags": [
+    {
+      "id": "tag-amigo",
+      "name": "Amigo",
+      "type": "global",
+      "owner": "system"
+    },
+    {
+      "id": "tag-pessoal",
+      "name": "Pessoal",
+      "type": "global",
+      "owner": "system"
+    },
+    {
+      "id": "tag-trabalho",
+      "name": "Trabalho",
+      "type": "global",
+      "owner": "system"
+    },
+    {
+      "id": "tag-1782669833202",
+      "name": "Família",
+      "type": "global",
+      "owner": "system"
+    }
+  ],
+  "associations": []
+}

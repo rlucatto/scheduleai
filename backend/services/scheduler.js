@@ -1,11 +1,15 @@
 import { listEvents, getAuthStatus } from './calendar.js';
 import { getTravelTime } from './travel.js';
+import fs from 'fs';
+import path from 'path';
+
+const PREFS_FILE = path.join(process.cwd(), 'preferences.json');
 
 let ioInstance = null;
 let schedulerInterval = null;
 
 // User settings (mutable via API)
-let userPreferences = {
+const defaultPreferences = {
   origin: '',
   homeAddress: '',
   workAddress: '',
@@ -17,8 +21,29 @@ let userPreferences = {
   ttsMode: 'gemini', // tts mode: gemini or browser
   ttsVoice: 'Puck', // TTS voice preference
   hobbies: '',
-  birthdayAlerts: ''
+  birthdayAlerts: '',
+  userName: '',
+  agentName: 'ScheduleAI',
+  userBirthday: '',
+  onboardingStep: 'welcome'
 };
+
+let userPreferences = { ...defaultPreferences };
+
+// Load persisted preferences
+const loadPreferences = () => {
+  if (fs.existsSync(PREFS_FILE)) {
+    try {
+      const content = fs.readFileSync(PREFS_FILE, 'utf8');
+      userPreferences = { ...defaultPreferences, ...JSON.parse(content) };
+      console.log('[PREFS] Preferences loaded successfully from preferences.json.');
+    } catch (err) {
+      console.error('[PREFS] Error reading preferences.json:', err.message);
+    }
+  }
+};
+
+loadPreferences();
 
 // Store fired notifications to prevent duplicates
 // format: { "event-id-prep": true, "event-id-leave": true }
@@ -26,6 +51,12 @@ const firedNotifications = new Set();
 
 export const setPreferences = (newPrefs) => {
   userPreferences = { ...userPreferences, ...newPrefs };
+  try {
+    fs.writeFileSync(PREFS_FILE, JSON.stringify(userPreferences, null, 2), 'utf8');
+    console.log('[PREFS] Preferences saved successfully to preferences.json.');
+  } catch (err) {
+    console.error('[PREFS] Error writing preferences.json:', err.message);
+  }
   if (ioInstance) {
     ioInstance.emit('auth_change', {
       status: getAuthStatus(),

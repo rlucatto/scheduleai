@@ -417,6 +417,17 @@ app.post('/api/auth/save-tokens', async (req, res) => {
 
 app.post('/api/auth/disconnect', (req, res) => {
   disconnectGoogle();
+  setPreferences({
+    userName: '',
+    agentName: 'ScheduleAI',
+    userBirthday: '',
+    onboardingStep: 'welcome',
+    hobbies: '',
+    birthdayAlerts: '',
+    origin: '',
+    homeAddress: '',
+    workAddress: ''
+  });
   res.json({ success: true, status: getAuthStatus() });
 });
 
@@ -526,6 +537,26 @@ app.post('/api/assistant/chat', async (req, res) => {
 app.get('/api/assistant/proactive-greeting', async (req, res) => {
   try {
     const prefs = getPreferences();
+    
+    // Check if onboarding is active
+    if (!prefs.onboardingStep || prefs.onboardingStep === 'welcome') {
+      const welcomeMessage = `E aí! Eu sou o **ScheduleAI**, seu parceiro de organização inteligente. Estou aqui para te ajudar com seus compromissos, tarefas e tempos de deslocamento.\n\nPara a gente se conhecer melhor, como você prefere ser chamado (seu nome ou apelido)?`;
+      setPreferences({ onboardingStep: 'ask_username' });
+      return res.json({ text: welcomeMessage });
+    } else if (prefs.onboardingStep !== 'completed') {
+      const stepPrompts = {
+        'ask_username': 'Como você prefere que eu te chame? Pode ser seu nome ou algum apelido.',
+        'ask_agentname': 'E como você gostaria de me chamar?',
+        'ask_home': 'Qual é o seu endereço de casa? Isso me ajuda a calcular seu tempo de trânsito.',
+        'ask_work': 'E qual o endereço do seu trabalho?',
+        'ask_hobbies': 'Quais são seus hobbies ou o que você mais gosta de fazer no tempo livre?',
+        'ask_birthday': 'Quando é o seu aniversário? (Dia e mês ou ano também se quiser)',
+        'ask_birthday_alerts': 'Quais são os nomes de contatos importantes que você quer que eu te lembre do aniversário deles?'
+      };
+      const message = `E aí! Vamos continuar de onde paramos?\n\n${stepPrompts[prefs.onboardingStep] || 'Como você prefere ser chamado?'}`;
+      return res.json({ text: message });
+    }
+
     const city = prefs.origin || 'São Paulo';
     const cleanCity = city.split(',')[0].trim();
     const hobbies = prefs.hobbies || '';
