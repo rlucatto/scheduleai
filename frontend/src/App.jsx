@@ -31,7 +31,8 @@ import {
   Users,
   Phone,
   Mail,
-  Cake
+  Cake,
+  Tag
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -207,6 +208,11 @@ function App() {
   const [contacts, setContacts] = useState([]);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [allTags, setAllTags] = useState([]);
+  const [editingContactResourceName, setEditingContactResourceName] = useState(null);
+  const [newTagNameInput, setNewTagNameInput] = useState('');
+  const [newTagTypeInput, setNewTagTypeInput] = useState('private');
+  const [selectedFilterTag, setSelectedFilterTag] = useState('Todos');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDeadline, setNewTaskDeadline] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('medium');
@@ -683,15 +689,105 @@ function App() {
   const fetchContacts = async () => {
     setIsLoadingContacts(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/contacts`);
+      const email = status.userEmail || '';
+      const res = await fetch(`${BACKEND_URL}/api/contacts?email=${encodeURIComponent(email)}`);
       if (res.ok) {
         const data = await res.json();
         setContacts(data);
       }
+      await fetchTags();
     } catch (err) {
       console.error('Error fetching contacts:', err);
     } finally {
       setIsLoadingContacts(false);
+    }
+  };
+
+  // Fetch tags
+  const fetchTags = async () => {
+    try {
+      const email = status.userEmail || '';
+      const res = await fetch(`${BACKEND_URL}/api/tags?email=${encodeURIComponent(email)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllTags(data);
+      }
+    } catch (err) {
+      console.error('Error fetching tags:', err);
+    }
+  };
+
+  // Create new tag
+  const handleCreateTag = async (tagName, tagType) => {
+    if (!tagName.trim()) return null;
+    try {
+      const email = status.userEmail || '';
+      const res = await fetch(`${BACKEND_URL}/api/tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tagName.trim(), type: tagType, email })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllTags(data);
+        setNewTagNameInput('');
+        addCustomToast('Sucesso', `Tag "${tagName}" criada com sucesso!`, 'success');
+        return tagName.trim();
+      } else {
+        const errData = await res.json();
+        addCustomToast('Erro', errData.error || 'Não foi possível criar a tag.', 'error');
+      }
+    } catch (err) {
+      console.error('Error creating tag:', err);
+      addCustomToast('Erro', 'Erro ao criar a tag.', 'error');
+    }
+    return null;
+  };
+
+  // Toggle a tag association for a contact
+  const handleToggleContactTag = async (contact, tagName) => {
+    const email = status.userEmail || '';
+    const currentTags = contact.tags || [];
+    let updatedTags;
+    if (currentTags.includes(tagName)) {
+      updatedTags = currentTags.filter(t => t !== tagName);
+    } else {
+      updatedTags = [...currentTags, tagName];
+    }
+
+    // Optimistically update frontend state
+    setContacts(prev => prev.map(c => {
+      if (c.resourceName === contact.resourceName) {
+        return { ...c, tags: updatedTags };
+      }
+      return c;
+    }));
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/contacts/tags`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resourceName: contact.resourceName, tags: updatedTags, email })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setContacts(prev => prev.map(c => {
+          if (c.resourceName === contact.resourceName) {
+            return { ...c, tags: data.tags };
+          }
+          return c;
+        }));
+      }
+    } catch (err) {
+      console.error('Error toggling contact tag:', err);
+      addCustomToast('Erro', 'Não foi possível atualizar as tags do contato.', 'error');
+      // Revert optimistic update
+      setContacts(prev => prev.map(c => {
+        if (c.resourceName === contact.resourceName) {
+          return { ...c, tags: currentTags };
+        }
+        return c;
+      }));
     }
   };
 
@@ -2152,8 +2248,50 @@ function App() {
                 placeholder="Buscar contato por nome, e-mail ou telefone..." 
                 value={contactSearchQuery}
                 onChange={e => setContactSearchQuery(e.target.value)}
-                style={{ width: '100%' }}
+                style={{ width: '100%', marginBottom: '12px' }}
               />
+              
+              {/* Tag Filter Pills */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => setSelectedFilterTag('Todos')}
+                  style={{
+                    padding: '4px 12px',
+                    fontSize: '12px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    border: '1px solid var(--border-color)',
+                    background: selectedFilterTag === 'Todos' ? 'var(--accent-hover)' : 'rgba(255, 255, 255, 0.02)',
+                    color: selectedFilterTag === 'Todos' ? '#fff' : 'var(--text-secondary)',
+                    fontWeight: selectedFilterTag === 'Todos' ? 'bold' : 'normal',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  Todos
+                </button>
+                {allTags.map(tag => {
+                  const isSelected = selectedFilterTag === tag.name;
+                  return (
+                    <button
+                      key={tag.id}
+                      onClick={() => setSelectedFilterTag(tag.name)}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '12px',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        border: '1px solid var(--border-color)',
+                        background: isSelected ? 'var(--accent-hover)' : 'rgba(255, 255, 255, 0.02)',
+                        color: isSelected ? '#fff' : 'var(--text-secondary)',
+                        fontWeight: isSelected ? 'bold' : 'normal',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {tag.name} {tag.type === 'global' ? '' : '🔒'}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2163,19 +2301,25 @@ function App() {
                 </div>
               ) : (() => {
                 const filtered = contacts.filter(contact => {
+                  // Search query filter
                   const q = contactSearchQuery.toLowerCase();
-                  return (
+                  const matchesQuery = 
                     contact.name.toLowerCase().includes(q) ||
                     (contact.email && contact.email.toLowerCase().includes(q)) ||
-                    (contact.phone && contact.phone.includes(q))
-                  );
+                    (contact.phone && contact.phone.includes(q));
+                  
+                  if (!matchesQuery) return false;
+
+                  // Tag filter
+                  if (selectedFilterTag === 'Todos') return true;
+                  return contact.tags && contact.tags.includes(selectedFilterTag);
                 }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
                 if (filtered.length === 0) {
                   return (
                     <div className="card glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
                       <Users size={36} />
-                      <span>{contacts.length === 0 ? 'Nenhum contato encontrado na agenda.' : 'Nenhum contato coincide com a busca.'}</span>
+                      <span>{contacts.length === 0 ? 'Nenhum contato encontrado na agenda.' : 'Nenhum contato coincide com a busca ou filtro.'}</span>
                     </div>
                   );
                 }
@@ -2216,7 +2360,34 @@ function App() {
                               {contact.name}
                             </div>
                             
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                            {/* Contact tag badges */}
+                            {contact.tags && contact.tags.length > 0 && (
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                {contact.tags.map(tagName => {
+                                  let bg = 'rgba(255, 255, 255, 0.05)';
+                                  let fg = 'var(--text-secondary)';
+                                  if (tagName.toLowerCase() === 'amigo') { bg = 'rgba(76, 175, 80, 0.15)'; fg = '#4caf50'; }
+                                  else if (tagName.toLowerCase() === 'pessoal') { bg = 'rgba(33, 150, 243, 0.15)'; fg = '#2196f3'; }
+                                  else if (tagName.toLowerCase() === 'trabalho') { bg = 'rgba(244, 67, 54, 0.15)'; fg = '#f44336'; }
+                                  else { bg = 'rgba(156, 39, 176, 0.15)'; fg = '#9c27b0'; }
+                                  
+                                  return (
+                                    <span key={tagName} style={{
+                                      padding: '2px 8px',
+                                      fontSize: '10px',
+                                      borderRadius: '4px',
+                                      background: bg,
+                                      color: fg,
+                                      fontWeight: '600'
+                                    }}>
+                                      {tagName}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                               {contact.email && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   <Mail size={12} style={{ color: 'var(--accent-hover)' }} />
@@ -2253,7 +2424,34 @@ function App() {
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <button 
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              if (editingContactResourceName === contact.resourceName) {
+                                setEditingContactResourceName(null);
+                              } else {
+                                setEditingContactResourceName(contact.resourceName);
+                                setNewTagNameInput('');
+                              }
+                            }}
+                            style={{ 
+                              padding: '6px 12px', 
+                              fontSize: '12px', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px',
+                              borderRadius: '20px',
+                              background: editingContactResourceName === contact.resourceName ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255,255,255,0.03)',
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-color)',
+                            }}
+                            title="Gerenciar Tags"
+                          >
+                            <Tag size={13} style={{ color: 'var(--text-secondary)' }} />
+                            <span>Tags</span>
+                          </button>
+
                           <button 
                             className={`btn ${isMonitored ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={() => handleToggleBirthdayAlert(contact)}
@@ -2275,6 +2473,103 @@ function App() {
                           </button>
                         </div>
                       </div>
+
+                      {/* Expanded Tag Editor Panel */}
+                      {editingContactResourceName === contact.resourceName && (
+                        <div style={{
+                          marginTop: '16px',
+                          paddingTop: '16px',
+                          borderTop: '1px solid var(--border-color)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px'
+                        }}>
+                          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                            Tags para {contact.name}:
+                          </div>
+                          
+                          {/* Available tag list */}
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {allTags.map(tag => {
+                              const isChecked = (contact.tags || []).includes(tag.name);
+                              return (
+                                <label 
+                                  key={tag.id} 
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    background: isChecked ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.01)',
+                                    padding: '4px 10px',
+                                    borderRadius: '12px',
+                                    border: isChecked ? '1px solid var(--accent-hover)' : '1px solid var(--border-color)',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    userSelect: 'none'
+                                  }}
+                                >
+                                  <input 
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => handleToggleContactTag(contact, tag.name)}
+                                    style={{ cursor: 'pointer' }}
+                                  />
+                                  <span>{tag.name}</span>
+                                  {tag.type === 'global' ? (
+                                    <span style={{ fontSize: '9px', opacity: 0.6, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '3px' }}>Global</span>
+                                  ) : (
+                                    <span style={{ fontSize: '9px', opacity: 0.6, background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '3px' }}>Privada</span>
+                                  )}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Create tag inline form */}
+                          <form 
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              if (!newTagNameInput.trim()) return;
+                              const newTag = await handleCreateTag(newTagNameInput, newTagTypeInput);
+                              if (newTag) {
+                                handleToggleContactTag(contact, newTag);
+                              }
+                            }}
+                            style={{
+                              display: 'flex',
+                              gap: '8px',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              marginTop: '8px'
+                            }}
+                          >
+                            <input 
+                              type="text" 
+                              className="form-input"
+                              placeholder="Nova tag..."
+                              value={newTagNameInput}
+                              onChange={e => setNewTagNameInput(e.target.value)}
+                              style={{ flex: 1, minWidth: '120px', padding: '6px 10px', fontSize: '12px' }}
+                            />
+                            
+                            {status.userEmail === 'rafael.lucatto@gmail.com' && (
+                              <select 
+                                className="form-input"
+                                value={newTagTypeInput}
+                                onChange={e => setNewTagTypeInput(e.target.value)}
+                                style={{ padding: '6px 10px', fontSize: '12px' }}
+                              >
+                                <option value="private">Privada</option>
+                                <option value="global">Global</option>
+                              </select>
+                            )}
+                            
+                            <button type="submit" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                              Criar e Associar
+                            </button>
+                          </form>
+                        </div>
+                      )}
                     </div>
                   );
                 });

@@ -59,6 +59,20 @@ export const oauth2Client = (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_
   : null;
 
 export let isGoogleConnected = false;
+export let currentUserEmail = null;
+
+// Fetch user email from Google UserInfo API
+const fetchUserEmail = async () => {
+  if (!oauth2Client) return;
+  try {
+    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+    const userInfo = await oauth2.userinfo.get();
+    currentUserEmail = userInfo.data.email;
+    console.log('[OAUTH] Successfully fetched user email:', currentUserEmail);
+  } catch (err) {
+    console.error('[OAUTH] Failed to fetch user email:', err.message);
+  }
+};
 
 // Auto-load persisted tokens on startup
 const loadPersistedTokens = () => {
@@ -70,6 +84,7 @@ const loadPersistedTokens = () => {
         oauth2Client.setCredentials(tokens);
         isGoogleConnected = true;
         console.log('[OAUTH] Automatically loaded persisted Google Calendar tokens from tokens.json.');
+        fetchUserEmail(); // load email asynchronously
       }
     } catch (err) {
       console.error('[OAUTH] Failed to load persisted tokens:', err.message);
@@ -83,7 +98,8 @@ export const getAuthStatus = () => {
   return {
     isConfigured: !!oauth2Client,
     isConnected: isGoogleConnected,
-    mode: isGoogleConnected ? 'google' : 'mock'
+    mode: isGoogleConnected ? 'google' : 'mock',
+    userEmail: currentUserEmail || 'rafael.lucatto@gmail.com'
   };
 };
 
@@ -92,7 +108,8 @@ export const getAuthUrl = (origin) => {
   const scopes = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/calendar.events',
-    'https://www.googleapis.com/auth/contacts'
+    'https://www.googleapis.com/auth/contacts',
+    'https://www.googleapis.com/auth/userinfo.email'
   ];
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
@@ -116,6 +133,7 @@ export const handleAuthCode = async (code) => {
     console.error('[OAUTH] Failed to persist tokens:', err.message);
   }
   
+  await fetchUserEmail();
   return tokens;
 };
 
@@ -124,6 +142,7 @@ export const disconnectGoogle = () => {
     oauth2Client.setCredentials(null);
   }
   isGoogleConnected = false;
+  currentUserEmail = null;
   
   // Remove persisted tokens file
   try {

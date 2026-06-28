@@ -37,6 +37,12 @@ import {
   getPlanVersions
 } from './services/planning.js';
 import { listGoogleContacts } from './services/contacts.js';
+import {
+  getVisibleTags,
+  addTag,
+  getContactTags,
+  updateContactTags
+} from './services/tags.js';
 
 dotenv.config();
 
@@ -327,8 +333,53 @@ app.delete('/api/tasks/:id', (req, res) => {
 // 6.5. Contacts Routes
 app.get('/api/contacts', async (req, res) => {
   try {
+    const { email } = req.query;
     const contacts = await listGoogleContacts();
-    res.json(contacts);
+    
+    // Enrich each contact with its tags
+    const enriched = contacts.map(c => ({
+      ...c,
+      tags: getContactTags(c.resourceName, email)
+    }));
+    
+    res.json(enriched);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Tags endpoints
+app.get('/api/tags', (req, res) => {
+  try {
+    const { email } = req.query;
+    const tags = getVisibleTags(email);
+    res.json(tags);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/tags', (req, res) => {
+  try {
+    const { name, type, email } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+    const tags = addTag(name, type, email);
+    res.json(tags);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/contacts/tags', (req, res) => {
+  try {
+    const { resourceName, tags, email } = req.body;
+    if (!resourceName) {
+      return res.status(400).json({ error: 'resourceName is required' });
+    }
+    const updatedTags = updateContactTags(resourceName, tags || [], email);
+    res.json({ resourceName, tags: updatedTags });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
