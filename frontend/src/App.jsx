@@ -2055,8 +2055,10 @@ function App() {
                       onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
                       style={{ flex: 1 }}
                     >
-                      <option value="pt_BR-faber-medium">👦 Lucas (Masculino - Alta Qualidade)</option>
+                      <option value="pt_BR-cadu-medium">👦 Cadu (Masculino - Médio)</option>
                       <option value="pt_BR-edresson-low">🧔 Edresson (Masculino Calmo)</option>
+                      <option value="pt_BR-faber-medium">👦 Faber (Masculino - Alta Qualidade)</option>
+                      <option value="pt_BR-jeff-medium">👦 Jeff (Masculino - Médio)</option>
                     </select>
                   ) : (!preferences.ttsMode || preferences.ttsMode === 'gemini') ? (
                     <select 
@@ -2509,8 +2511,10 @@ function App() {
                   <option value="gemini:Aoede" style={{ background: '#18181b', color: 'white' }}>Aoede (Feminino Brilhante)</option>
                 </optgroup>
                 <optgroup label="🎙️ Voz Neural Local (Offline)">
-                  <option value="local-neural:pt_BR-faber-medium" style={{ background: '#18181b', color: 'white' }}>👦 Lucas (Alta Qualidade)</option>
+                  <option value="local-neural:pt_BR-cadu-medium" style={{ background: '#18181b', color: 'white' }}>👦 Cadu (Médio)</option>
                   <option value="local-neural:pt_BR-edresson-low" style={{ background: '#18181b', color: 'white' }}>🧔 Edresson (Calmo)</option>
+                  <option value="local-neural:pt_BR-faber-medium" style={{ background: '#18181b', color: 'white' }}>👦 Faber (Alta Qualidade)</option>
+                  <option value="local-neural:pt_BR-jeff-medium" style={{ background: '#18181b', color: 'white' }}>👦 Jeff (Médio)</option>
                 </optgroup>
                 <optgroup label="💻 Navegador (Local - Voz Padrão)">
                   {browserVoices.length === 0 ? (
