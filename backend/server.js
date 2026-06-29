@@ -585,11 +585,11 @@ app.get('/api/assistant/proactive-greeting', async (req, res) => {
     const cleanBirthdayAlerts = Array.isArray(birthdayAlerts) ? birthdayAlerts.join(', ') : birthdayAlerts;
 
     // Dynamically import searching functions
-    const { getSearchGroundingContext, executeWithFallback } = await import('./services/gemini.js');
+    const { executeWithFallback } = await import('./services/gemini.js');
     
-    // Search for trending events in user's city
-    console.log(`[PROACTIVE GREETING] Grounding events search for city: ${cleanCity}...`);
-    const searchContext = await getSearchGroundingContext(`trending events and popular activities in ${cleanCity}`);
+    // We skip live web search during startup to make the proactive greeting load instantly (< 1.5s).
+    // If the user wants to search for local events, they can ask the assistant in the chat.
+    const searchContext = '';
 
     const response = await executeWithFallback(async (genAIInstance, modelName) => {
       const model = genAIInstance.getGenerativeModel({ model: modelName });
