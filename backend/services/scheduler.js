@@ -14,7 +14,7 @@ const defaultPreferences = {
   prepTimeMinutes: 60, // time before departure to get ready
   leadTimeMinutes: 15,  // time before departure to warn
   advanceArrivalMinutes: 15, // arrive 15 minutes early by default
-  modelPriority: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'], // priority list of models
+  modelPriority: ['gemini-2.5-flash'], // priority list of models
   ttsMode: 'gemini', // tts mode: gemini or browser
   ttsVoice: 'Puck', // TTS voice preference
   hobbies: '',
@@ -35,6 +35,12 @@ let userPreferences = { ...defaultPreferences };
 const loadPreferences = async () => {
   try {
     userPreferences = await getDBPreferences(defaultPreferences);
+    if (userPreferences.modelPriority) {
+      userPreferences.modelPriority = userPreferences.modelPriority.filter(m => m !== 'gemini-2.0-flash' && m !== 'gemini-1.5-flash');
+      if (userPreferences.modelPriority.length === 0) {
+        userPreferences.modelPriority = ['gemini-2.5-flash'];
+      }
+    }
     console.log('[PREFS] Preferences loaded successfully.');
   } catch (err) {
     console.error('[PREFS] Error loading preferences:', err.message);
@@ -49,6 +55,12 @@ const firedNotifications = new Set();
 
 export const setPreferences = async (newPrefs) => {
   let updatedPrefs = { ...userPreferences, ...newPrefs };
+  if (updatedPrefs.modelPriority) {
+    updatedPrefs.modelPriority = updatedPrefs.modelPriority.filter(m => m !== 'gemini-2.0-flash' && m !== 'gemini-1.5-flash');
+    if (updatedPrefs.modelPriority.length === 0) {
+      updatedPrefs.modelPriority = ['gemini-2.5-flash'];
+    }
+  }
 
   // If origin is provided but city or timezone is missing, resolve them on the backend
   if (newPrefs.origin && (!newPrefs.userTimezone || !newPrefs.userCity)) {
@@ -100,7 +112,16 @@ export const setPreferences = async (newPrefs) => {
   return userPreferences;
 };
 
-export const getPreferences = () => userPreferences;
+export const getPreferences = () => {
+  let prefs = { ...userPreferences };
+  if (prefs.modelPriority) {
+    prefs.modelPriority = prefs.modelPriority.filter(m => m !== 'gemini-2.0-flash' && m !== 'gemini-1.5-flash');
+    if (prefs.modelPriority.length === 0) {
+      prefs.modelPriority = ['gemini-2.5-flash'];
+    }
+  }
+  return prefs;
+};
 
 // Calculate all details for a single event:
 // - travelDuration (seconds)
