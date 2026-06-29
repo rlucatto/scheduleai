@@ -4,6 +4,10 @@ import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config();
+dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
 
 import { 
   getAuthStatus, 
@@ -46,8 +50,6 @@ import {
   getContactTags,
   updateContactTags
 } from './services/tags.js';
-
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
@@ -419,7 +421,7 @@ app.post('/api/auth/disconnect', async (req, res) => {
   await disconnectGoogle();
   await setPreferences({
     userName: '',
-    agentName: 'ScheduleAI',
+    agentName: '',
     userBirthday: '',
     onboardingStep: 'welcome',
     hobbies: '',
@@ -427,6 +429,7 @@ app.post('/api/auth/disconnect', async (req, res) => {
     origin: '',
     homeAddress: '',
     workAddress: '',
+    transportMode: 'driving',
     favoriteTags: 'Amigo, Pessoal, Trabalho, Família'
   });
   res.json({ success: true, status: getAuthStatus() });
@@ -539,12 +542,27 @@ app.get('/api/assistant/proactive-greeting', async (req, res) => {
   try {
     const prefs = getPreferences();
     
+    // Identify if onboarding is complete or needs to run/resume
+    let targetStep = prefs.onboardingStep || 'welcome';
+    if (!prefs.userName || prefs.userName.trim() === '') {
+      targetStep = 'ask_username';
+    } else if (!prefs.agentName || prefs.agentName.trim() === '') {
+      targetStep = 'ask_agentname';
+    } else if (!prefs.homeAddress || prefs.homeAddress.trim() === '') {
+      targetStep = 'ask_home';
+    }
+
+    if (targetStep !== prefs.onboardingStep) {
+      console.log(`[ONBOARDING] Resetting/resuming onboarding step to: ${targetStep} because critical info is missing.`);
+      await setPreferences({ onboardingStep: targetStep });
+    }
+
     // Check if onboarding is active
-    if (!prefs.onboardingStep || prefs.onboardingStep === 'welcome') {
+    if (targetStep === 'welcome' || targetStep === 'ask_username') {
       const welcomeMessage = `E aí! Eu sou o **ScheduleAI**, seu parceiro de organização inteligente. Estou aqui para te ajudar com seus compromissos, tarefas e tempos de deslocamento.\n\nPara a gente se conhecer melhor, como você prefere ser chamado (seu nome ou apelido)?`;
       await setPreferences({ onboardingStep: 'ask_username' });
       return res.json({ text: welcomeMessage });
-    } else if (prefs.onboardingStep !== 'completed') {
+    } else if (targetStep !== 'completed') {
       const stepPrompts = {
         'ask_username': 'Como você prefere que eu te chame? Pode ser seu nome ou algum apelido.',
         'ask_agentname': 'E como você gostaria de me chamar?',
@@ -554,7 +572,7 @@ app.get('/api/assistant/proactive-greeting', async (req, res) => {
         'ask_birthday': 'Quando é o seu aniversário? (Dia e mês ou ano também se quiser)',
         'ask_birthday_alerts': 'Quais são os nomes de contatos importantes que você quer que eu te lembre do aniversário deles?'
       };
-      const message = `E aí! Vamos continuar de onde paramos?\n\n${stepPrompts[prefs.onboardingStep] || 'Como você prefere ser chamado?'}`;
+      const message = `E aí! Vamos continuar de onde paramos?\n\n${stepPrompts[targetStep] || 'Como você prefere ser chamado?'}`;
       return res.json({ text: message });
     }
 

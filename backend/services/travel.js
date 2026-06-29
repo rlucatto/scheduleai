@@ -1,7 +1,9 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
+dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
 
 // Dictionary of predefined mock travel durations for São Paulo (or generic lookups)
 // to make the simulation look realistic and instantaneous.
@@ -17,7 +19,7 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
   const mapsKey = process.env.GOOGLE_MAPS_API_KEY;
   const travelMode = mode || 'driving';
 
-  if (!destination) {
+  if (!origin || !destination) {
     return {
       durationSeconds: 0,
       distanceText: '0 km',
@@ -34,7 +36,7 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
         'https://maps.googleapis.com/maps/api/directions/json',
         {
           params: {
-            origin: origin || 'São Paulo, SP',
+            origin: origin,
             destination,
             mode: travelMode,
             key: mapsKey
@@ -145,8 +147,7 @@ export const reverseGeocode = async (coords) => {
     }
   }
 
-  // Realistic mock geocoding fallback for São Paulo (always includes street, number, neighborhood, city, state)
-  return 'Avenida Paulista, 1000 - Bela Vista, São Paulo - SP';
+  return null;
 };
 
 const timezoneCache = new Map();

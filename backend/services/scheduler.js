@@ -10,7 +10,7 @@ const defaultPreferences = {
   origin: '',
   homeAddress: '',
   workAddress: '',
-  transportMode: '',
+  transportMode: 'driving',
   prepTimeMinutes: 60, // time before departure to get ready
   leadTimeMinutes: 15,  // time before departure to warn
   advanceArrivalMinutes: 15, // arrive 15 minutes early by default
@@ -20,10 +20,12 @@ const defaultPreferences = {
   hobbies: '',
   birthdayAlerts: '',
   userName: '',
-  agentName: 'ScheduleAI',
+  agentName: '',
   userBirthday: '',
   onboardingStep: 'welcome',
-  favoriteTags: 'Amigo, Pessoal, Trabalho, Família'
+  favoriteTags: 'Amigo, Pessoal, Trabalho, Família',
+  userTimezone: 'America/Sao_Paulo',
+  userCity: 'São Paulo'
 };
 
 let userPreferences = { ...defaultPreferences };
@@ -46,7 +48,43 @@ loadPreferences();
 const firedNotifications = new Set();
 
 export const setPreferences = async (newPrefs) => {
-  userPreferences = { ...userPreferences, ...newPrefs };
+  let updatedPrefs = { ...userPreferences, ...newPrefs };
+
+  // If origin is provided but city or timezone is missing, resolve them on the backend
+  if (newPrefs.origin && (!newPrefs.userTimezone || !newPrefs.userCity)) {
+    try {
+      const { getTimezoneFromCoords, reverseGeocode } = await import('./travel.js');
+      if (!newPrefs.userTimezone) {
+        updatedPrefs.userTimezone = await getTimezoneFromCoords(newPrefs.origin);
+      }
+      if (!newPrefs.userCity) {
+        const resolvedAddress = await reverseGeocode(newPrefs.origin);
+        if (resolvedAddress) {
+          const parts = resolvedAddress.split(',');
+          if (parts.length >= 2) {
+            updatedPrefs.userCity = parts[parts.length - 2].trim();
+          } else {
+            updatedPrefs.userCity = resolvedAddress;
+          }
+        } else {
+          // Fallback parsing from address string
+          const originLower = newPrefs.origin.toLowerCase();
+          if (originLower.includes('chicago')) {
+            updatedPrefs.userCity = 'Chicago';
+          } else if (originLower.includes('são paulo') || originLower.includes('sao paulo')) {
+            updatedPrefs.userCity = 'São Paulo';
+          } else {
+            updatedPrefs.userCity = newPrefs.origin;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[PREFS] Error auto-resolving timezone/city from origin:', e.message);
+    }
+  }
+
+  userPreferences = updatedPrefs;
+
   try {
     await saveDBPreferences(userPreferences);
     console.log('[PREFS] Preferences saved successfully.');

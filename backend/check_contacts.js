@@ -1,7 +1,9 @@
 import dotenv from 'dotenv';
+import path from 'path';
 import { searchGoogleContacts } from './services/contacts.js';
 
 dotenv.config();
+dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
 
 async function run() {
   try {

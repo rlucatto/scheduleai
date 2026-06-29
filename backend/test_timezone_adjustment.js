@@ -44,7 +44,7 @@ async function runTests() {
   console.log('Teste 5: Testando enrichEventsWithLocalTime...');
   
   // Define a localização do usuário como Chicago nas preferências
-  setPreferences({ origin: '4544 N Spaulding Ave, Chicago' });
+  await setPreferences({ origin: '4544 N Spaulding Ave, Chicago' });
   
   // Evento às 10:00 UTC (10h UTC = 5h da manhã em Chicago / 7h da manhã em SP)
   const mockEvents = [

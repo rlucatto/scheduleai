@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
+import path from 'path';
 import axios from 'axios';
 import { listEvents, insertEvent, deleteEvent, updateEvent } from './calendar.js';
 import { getTravelTime, reverseGeocode } from './travel.js';
@@ -9,6 +10,7 @@ import { getPreferences, setPreferences } from './scheduler.js';
 import { searchGoogleContacts, createGoogleContact, updateGoogleContact } from './contacts.js';
 
 dotenv.config();
+dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
 
 let lastModelUsed = '';
 
@@ -17,22 +19,26 @@ const handleUpdateUserPreferences = async (args) => {
 
   if (args.homeAddress && coordsRegex.test(args.homeAddress.trim())) {
     const resolved = await reverseGeocode(args.homeAddress);
-    return {
-      error: `CONFIRMAÇÃO NECESSÁRIA: O endereço correspondente às coordenadas é '${resolved}'. Pergunte ao usuário: 'O endereço correspondente à sua localização atual é ${resolved}. Confirma que este é o seu endereço de casa?'`,
-      status: 'needs_confirmation',
-      addressType: 'homeAddress',
-      resolvedAddress: resolved
-    };
+    if (resolved) {
+      return {
+        error: `CONFIRMAÇÃO NECESSÁRIA: O endereço correspondente às coordenadas é '${resolved}'. Pergunte ao usuário: 'O endereço correspondente à sua localização atual é ${resolved}. Confirma que este é o seu endereço de casa?'`,
+        status: 'needs_confirmation',
+        addressType: 'homeAddress',
+        resolvedAddress: resolved
+      };
+    }
   }
 
   if (args.workAddress && coordsRegex.test(args.workAddress.trim())) {
     const resolved = await reverseGeocode(args.workAddress);
-    return {
-      error: `CONFIRMAÇÃO NECESSÁRIA: O endereço correspondente às coordenadas é '${resolved}'. Pergunte ao usuário: 'O endereço correspondente à sua localização atual é ${resolved}. Confirma que este é o seu endereço de trabalho?'`,
-      status: 'needs_confirmation',
-      addressType: 'workAddress',
-      resolvedAddress: resolved
-    };
+    if (resolved) {
+      return {
+        error: `CONFIRMAÇÃO NECESSÁRIA: O endereço correspondente às coordenadas é '${resolved}'. Pergunte ao usuário: 'O endereço correspondente à sua localização atual é ${resolved}. Confirma que este é o seu endereço de trabalho?'`,
+        status: 'needs_confirmation',
+        addressType: 'workAddress',
+        resolvedAddress: resolved
+      };
+    }
   }
 
   return setPreferences(args);
@@ -327,8 +333,13 @@ export const enrichEventsWithLocalTime = async (events) => {
   
   let userTz = 'America/Sao_Paulo';
   try {
-    const { getTimezoneFromCoords } = await import('./travel.js');
-    userTz = await getTimezoneFromCoords(getPreferences().origin);
+    const prefs = getPreferences();
+    if (prefs.userTimezone) {
+      userTz = prefs.userTimezone;
+    } else {
+      const { getTimezoneFromCoords } = await import('./travel.js');
+      userTz = await getTimezoneFromCoords(prefs.origin);
+    }
   } catch (e) {
     console.error('Error resolving timezone for events:', e.message);
   }
@@ -1045,8 +1056,15 @@ const deepConvertTypesToLowercase = (obj) => {
 
 const callOllama = async (modelName, message, history, searchResultsContext) => {
   const prefs = getPreferences();
-  const { getTimezoneFromCoords } = await import('./travel.js');
-  const userTz = await getTimezoneFromCoords(prefs.origin);
+  let userTz = prefs.userTimezone;
+  if (!userTz) {
+    try {
+      const { getTimezoneFromCoords } = await import('./travel.js');
+      userTz = await getTimezoneFromCoords(prefs.origin);
+    } catch (e) {
+      userTz = 'America/Sao_Paulo';
+    }
+  }
   const tzString = getTimezoneString(userTz);
   const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
   const systemPrompt = systemInstruction + currentRefDate + 
@@ -1400,8 +1418,15 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
     return await executeWithFallback(
       // Gemini Handler
       async (genAIInstance, modelName) => {
-        const { getTimezoneFromCoords } = await import('./travel.js');
-        const userTz = await getTimezoneFromCoords(prefs.origin);
+        let userTz = prefs.userTimezone;
+        if (!userTz) {
+          try {
+            const { getTimezoneFromCoords } = await import('./travel.js');
+            userTz = await getTimezoneFromCoords(prefs.origin);
+          } catch (e) {
+            userTz = 'America/Sao_Paulo';
+          }
+        }
         const tzString = getTimezoneString(userTz);
         const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
         

@@ -620,6 +620,15 @@ function App() {
       if (savedPrefs) {
         try {
           const parsed = JSON.parse(savedPrefs);
+          // Sanitize old defaults to prevent restoring them
+          if (parsed.homeAddress === 'Avenida Paulista, 1000, São Paulo, SP') parsed.homeAddress = '';
+          if (parsed.userName === 'Rafael') parsed.userName = '';
+          if (parsed.agentName === 'ScheduleAI') parsed.agentName = '';
+          if (parsed.origin === 'São Paulo, SP' || parsed.origin === '42.041061,-87.70192000000002') parsed.origin = '';
+          if (parsed.onboardingStep === 'completed' && (!parsed.userName || !parsed.agentName)) {
+            parsed.onboardingStep = 'welcome';
+          }
+
           if ((!data.preferences.homeAddress && parsed.homeAddress) || 
               (!data.preferences.userName && parsed.userName) ||
               (data.preferences.onboardingStep === 'welcome' && parsed.onboardingStep === 'completed')) {
@@ -1490,37 +1499,44 @@ function App() {
       }
 
       const authStatus = finalAuthStatus || await fetchStatus();
-      await fetchTimeline();
-      await fetchModelHealth();
-      await fetchContacts(authStatus?.userEmail || '');
 
-      // Initialize chat greeting based on first access
-      // Initialize chat greeting dynamically from backend proactive-greeting endpoint
       setChatHistory([
         {
           sender: 'assistant',
           text: 'Conectando ao assistente...'
         }
       ]);
-      
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/assistant/proactive-greeting`);
-        const data = await res.json();
-        setChatHistory([
-          {
-            sender: 'assistant',
-            text: data.text
-          }
-        ]);
-      } catch (err) {
-        console.error('Error fetching proactive greeting:', err);
-        setChatHistory([
-          {
-            sender: 'assistant',
-            text: 'E aí! Como posso te ajudar hoje?'
-          }
-        ]);
-      }
+
+      const initGreeting = async () => {
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/assistant/proactive-greeting`);
+          const data = await res.json();
+          setChatHistory([
+            {
+              sender: 'assistant',
+              text: data.text
+            }
+          ]);
+        } catch (err) {
+          console.error('Error fetching proactive greeting:', err);
+          setChatHistory([
+            {
+              sender: 'assistant',
+              text: 'E aí! Como posso te ajudar hoje?'
+            }
+          ]);
+        }
+      };
+
+      // Fire timeline, model health, contacts, and greeting fetches in parallel
+      Promise.all([
+        fetchTimeline(),
+        fetchModelHealth(),
+        fetchContacts(authStatus?.userEmail || ''),
+        initGreeting()
+      ]).catch(err => {
+        console.error('Error during parallel app initialization:', err);
+      });
 
       if (authStatus && !authStatus.isConnected && authStatus.isConfigured) {
         console.log('[AUTO-CONNECT] User not connected. Automatically redirecting to Google Calendar connection...');
@@ -1528,13 +1544,18 @@ function App() {
       }
 
       // Helper to save coords
-      const saveOrigin = async (coords) => {
-        console.log('Saving origin coords:', coords);
+      const saveOrigin = async (coords, city, timezone) => {
+        console.log('Saving origin coords:', coords, 'city:', city, 'timezone:', timezone);
+        const localTz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
         try {
           const res = await fetch(`${BACKEND_URL}/api/preferences`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ origin: coords })
+            body: JSON.stringify({ 
+              origin: coords,
+              userTimezone: localTz,
+              userCity: city || ''
+            })
           });
           const data = await res.json();
           setPreferences(data);
@@ -1552,7 +1573,7 @@ function App() {
           if (res.ok) {
             const data = await res.json();
             if (data.loc) {
-              await saveOrigin(data.loc);
+              await saveOrigin(data.loc, data.city, data.timezone);
               return;
             }
           }
@@ -1565,7 +1586,7 @@ function App() {
           if (res.ok) {
             const data = await res.json();
             if (data.latitude && data.longitude) {
-              await saveOrigin(`${data.latitude},${data.longitude}`);
+              await saveOrigin(`${data.latitude},${data.longitude}`, data.cityName, data.timeZone);
               return;
             }
           }
@@ -1579,7 +1600,8 @@ function App() {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             const coords = `${position.coords.latitude},${position.coords.longitude}`;
-            await saveOrigin(coords);
+            const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            await saveOrigin(coords, null, localTz);
           },
           async (err) => {
             console.warn('Geolocation not allowed or failed:', err);
@@ -1654,10 +1676,31 @@ function App() {
 
   // Helper to format date nicely
   const formatTime = (isoString) => {
-    return new Date(isoString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    try {
+      const tz = preferences.userTimezone || undefined;
+      return new Date(isoString).toLocaleTimeString('pt-BR', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        timeZone: tz
+      });
+    } catch (e) {
+      console.warn('Error formatting time with timezone:', e);
+      return new Date(isoString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
   };
   const formatDate = (isoString) => {
-    return new Date(isoString).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' });
+    try {
+      const tz = preferences.userTimezone || undefined;
+      return new Date(isoString).toLocaleDateString('pt-BR', { 
+        weekday: 'short', 
+        day: 'numeric', 
+        month: 'short',
+        timeZone: tz
+      });
+    } catch (e) {
+      console.warn('Error formatting date with timezone:', e);
+      return new Date(isoString).toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
   };
 
   const renderSidebar = () => {

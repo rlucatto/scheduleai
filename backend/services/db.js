@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import path from 'path';
 
@@ -18,18 +19,18 @@ try {
   if (serviceAccountVar) {
     console.log('[DB] Initializing Firebase Admin with FIREBASE_SERVICE_ACCOUNT env var...');
     const serviceAccount = JSON.parse(serviceAccountVar);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+    initializeApp({
+      credential: cert(serviceAccount)
     });
-    db = admin.firestore();
+    db = getFirestore();
     isFirebaseInitialized = true;
   } else if (fs.existsSync(localKeyPath)) {
     console.log('[DB] Initializing Firebase Admin with local firebase-key.json...');
     const serviceAccount = JSON.parse(fs.readFileSync(localKeyPath, 'utf8'));
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+    initializeApp({
+      credential: cert(serviceAccount)
     });
-    db = admin.firestore();
+    db = getFirestore();
     isFirebaseInitialized = true;
   } else {
     console.log('[DB] Firebase credentials not found. Falling back to local JSON files.');
@@ -46,6 +47,19 @@ export const getDBPreferences = async (defaultPrefs) => {
       const doc = await db.collection('settings').doc('preferences').get();
       if (doc.exists) {
         return { ...defaultPrefs, ...doc.data() };
+      } else {
+        // First run after Firebase is enabled: Migrate local preferences to Firestore
+        if (fs.existsSync(PREFS_FILE)) {
+          try {
+            const content = fs.readFileSync(PREFS_FILE, 'utf8');
+            const localPrefs = JSON.parse(content);
+            console.log('[DB] Migrating local preferences.json to Firestore...');
+            await db.collection('settings').doc('preferences').set(localPrefs);
+            return { ...defaultPrefs, ...localPrefs };
+          } catch (migrateErr) {
+            console.error('[DB] Failed to migrate local preferences to Firestore:', migrateErr.message);
+          }
+        }
       }
     } catch (err) {
       console.error('[DB] Error getting preferences from Firestore:', err.message);
@@ -87,6 +101,19 @@ export const getDBTokens = async () => {
       const doc = await db.collection('settings').doc('tokens').get();
       if (doc.exists) {
         return doc.data();
+      } else {
+        // Migrate local tokens to Firestore
+        if (fs.existsSync(TOKENS_FILE)) {
+          try {
+            const content = fs.readFileSync(TOKENS_FILE, 'utf8');
+            const localTokens = JSON.parse(content);
+            console.log('[DB] Migrating local tokens.json to Firestore...');
+            await db.collection('settings').doc('tokens').set(localTokens);
+            return localTokens;
+          } catch (migrateErr) {
+            console.error('[DB] Failed to migrate local tokens to Firestore:', migrateErr.message);
+          }
+        }
       }
     } catch (err) {
       console.error('[DB] Error getting tokens from Firestore:', err.message);
@@ -147,6 +174,19 @@ export const getDBTags = async (defaultState) => {
       const doc = await db.collection('settings').doc('tags').get();
       if (doc.exists) {
         return doc.data();
+      } else {
+        // Migrate local tags to Firestore
+        if (fs.existsSync(TAGS_FILE)) {
+          try {
+            const content = fs.readFileSync(TAGS_FILE, 'utf8');
+            const localTags = JSON.parse(content);
+            console.log('[DB] Migrating local tags.json to Firestore...');
+            await db.collection('settings').doc('tags').set(localTags);
+            return localTags;
+          } catch (migrateErr) {
+            console.error('[DB] Failed to migrate local tags to Firestore:', migrateErr.message);
+          }
+        }
       }
     } catch (err) {
       console.error('[DB] Error getting tags from Firestore:', err.message);

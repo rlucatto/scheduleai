@@ -6,6 +6,7 @@ import path from 'path';
 import { getDBTokens, saveDBTokens, deleteDBTokens } from './db.js';
 
 dotenv.config();
+dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
 
 // Simple in-memory mock store for calendar events when OAuth is not configured
 let mockEvents = [];
@@ -167,9 +168,14 @@ export const insertEvent = async (eventData) => {
   let timeZone = 'America/Sao_Paulo';
   try {
     const { getPreferences } = await import('./scheduler.js');
-    const { getTimezoneFromCoords } = await import('./travel.js');
-    timeZone = await getTimezoneFromCoords(getPreferences().origin);
-    console.log(`[CALENDAR] Resolved timezone based on location/origin: ${timeZone}`);
+    const prefs = getPreferences();
+    if (prefs.userTimezone) {
+      timeZone = prefs.userTimezone;
+    } else {
+      const { getTimezoneFromCoords } = await import('./travel.js');
+      timeZone = await getTimezoneFromCoords(prefs.origin);
+    }
+    console.log(`[CALENDAR] Resolved timezone based on preferences/origin: ${timeZone}`);
   } catch (tzErr) {
     console.warn('[CALENDAR] Failed to resolve location timezone, using primary calendar fallback:', tzErr.message);
   }
@@ -248,8 +254,13 @@ export const updateEvent = async (eventId, updatedFields) => {
   let timeZone = 'America/Sao_Paulo';
   try {
     const { getPreferences } = await import('./scheduler.js');
-    const { getTimezoneFromCoords } = await import('./travel.js');
-    timeZone = await getTimezoneFromCoords(getPreferences().origin);
+    const prefs = getPreferences();
+    if (prefs.userTimezone) {
+      timeZone = prefs.userTimezone;
+    } else {
+      const { getTimezoneFromCoords } = await import('./travel.js');
+      timeZone = await getTimezoneFromCoords(prefs.origin);
+    }
   } catch (tzErr) {
     console.warn('[CALENDAR] Failed to resolve location timezone:', tzErr.message);
   }
