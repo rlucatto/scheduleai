@@ -654,33 +654,29 @@ function App() {
         setCurrentActiveModel(data.lastModelUsed);
       }
 
-      // Fetch local Ollama models list
-      let localModelsData = [];
-      try {
-        const localRes = await fetch(`${BACKEND_URL}/api/models/local`);
-        localModelsData = await localRes.json();
-        setLocalModels(localModelsData);
-      } catch (localErr) {
-        console.log('Error fetching local models:', localErr);
-      }
+      // Fetch local Ollama models list asynchronously in the background
+      fetch(`${BACKEND_URL}/api/models/local`)
+        .then(res => res.json())
+        .then(localModelsData => {
+          setLocalModels(localModelsData);
+          const existingPriority = finalPrefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
+          const mergedPriority = [...existingPriority];
+          localModelsData.forEach(model => {
+            if (!mergedPriority.includes(model)) {
+              mergedPriority.push(model);
+            }
+          });
+          const fullyMergedPrefs = {
+            ...finalPrefs,
+            modelPriority: mergedPriority
+          };
+          setPreferences(fullyMergedPrefs);
+          localStorage.setItem('scheduleai_preferences', JSON.stringify(fullyMergedPrefs));
+        })
+        .catch(localErr => {
+          console.log('Error fetching local models:', localErr);
+        });
 
-      // Merge local models into priority list, keeping existing priority order
-      const existingPriority = finalPrefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
-      const mergedPriority = [...existingPriority];
-      
-      localModelsData.forEach(model => {
-        if (!mergedPriority.includes(model)) {
-          mergedPriority.push(model);
-        }
-      });
-
-      const fullyMergedPrefs = {
-        ...finalPrefs,
-        modelPriority: mergedPriority
-      };
-
-      setPreferences(fullyMergedPrefs);
-      localStorage.setItem('scheduleai_preferences', JSON.stringify(fullyMergedPrefs));
       return data.status;
     } catch (err) {
       console.error('Error fetching auth status:', err);
@@ -1471,35 +1467,7 @@ function App() {
     window.addEventListener('message', handleMessage);
 
     const initData = async () => {
-      // Check if tokens are in hash (local redirect callback fallback)
-      const hash = window.location.hash;
-      let finalAuthStatus = null;
-      if (hash && hash.startsWith('#tokens=')) {
-        const base64Tokens = hash.substring(8);
-        try {
-          const decodedTokens = JSON.parse(atob(base64Tokens));
-          // Clear hash immediately so URL is clean
-          window.history.replaceState(null, null, window.location.pathname);
-          
-          // POST tokens to backend
-          const saveRes = await fetch(`${BACKEND_URL}/api/auth/save-tokens`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tokens: decodedTokens })
-          });
-          const saveResult = await saveRes.json();
-          if (saveResult.success && saveResult.status) {
-            finalAuthStatus = saveResult.status;
-            setStatus(saveResult.status);
-            addCustomToast('Sucesso', 'Conectado com sucesso ao Google Calendar!', 'success');
-          }
-        } catch (err) {
-          console.error('Failed to parse and save tokens from hash:', err);
-        }
-      }
-
-      const authStatus = finalAuthStatus || await fetchStatus();
-
+      // 1. Immediately display the loading message and fire the greeting call
       setChatHistory([
         {
           sender: 'assistant',
@@ -1527,19 +1495,49 @@ function App() {
           ]);
         }
       };
-
-      // Fire all initialization fetches independently so they don't block each other.
-      // The chat greeting will load instantly (<1.5s) without waiting for the heavier
-      // model health diagnostics or calendar calculations.
       initGreeting();
-      fetchTimeline();
-      fetchModelHealth();
-      fetchContacts(authStatus?.userEmail || '');
 
-      if (authStatus && !authStatus.isConnected && authStatus.isConfigured) {
-        console.log('[AUTO-CONNECT] User not connected. Automatically redirecting to Google Calendar connection...');
-        connectGoogleRedirect();
-      }
+      // 2. Perform the rest of the initialization asynchronously in the background so it doesn't block the greeting
+      const runRemainingInit = async () => {
+        const hash = window.location.hash;
+        let finalAuthStatus = null;
+        if (hash && hash.startsWith('#tokens=')) {
+          const base64Tokens = hash.substring(8);
+          try {
+            const decodedTokens = JSON.parse(atob(base64Tokens));
+            window.history.replaceState(null, null, window.location.pathname);
+            
+            const saveRes = await fetch(`${BACKEND_URL}/api/auth/save-tokens`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tokens: decodedTokens })
+            });
+            const saveResult = await saveRes.json();
+            if (saveResult.success && saveResult.status) {
+              finalAuthStatus = saveResult.status;
+              setStatus(saveResult.status);
+              addCustomToast('Sucesso', 'Conectado com sucesso ao Google Calendar!', 'success');
+            }
+          } catch (err) {
+            console.error('Failed to parse and save tokens from hash:', err);
+          }
+        }
+
+        const authStatus = finalAuthStatus || await fetchStatus();
+        
+        fetchTimeline();
+        fetchModelHealth();
+        fetchContacts(authStatus?.userEmail || '');
+
+        if (authStatus && !authStatus.isConnected && authStatus.isConfigured) {
+          console.log('[AUTO-CONNECT] User not connected. Automatically redirecting to Google Calendar connection...');
+          connectGoogleRedirect();
+        }
+      };
+
+      runRemainingInit().catch(err => {
+        console.error('Error running remaining initialization:', err);
+      });
 
       // Helper to save coords
       const saveOrigin = async (coords, city, timezone) => {

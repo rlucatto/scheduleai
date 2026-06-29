@@ -216,6 +216,10 @@ const getSmartSortedModels = (models, message) => {
 };
 
 const getLocalModels = async () => {
+  // In production (Render or other cloud environment), do not try to list local Ollama models to avoid 2s timeouts.
+  if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+    return [];
+  }
   try {
     const response = await axios.get('http://localhost:11434/api/tags', { timeout: 2000 });
     const models = response.data.models || [];
