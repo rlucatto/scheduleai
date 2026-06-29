@@ -331,6 +331,55 @@ function App() {
     window.speechSynthesis.speak(utterance);
   };
 
+  const seedOpfsCache = async (voiceId) => {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const piperDir = await root.getDirectoryHandle('piper', { create: true });
+      
+      const files = [
+        `${voiceId}`,
+        `${voiceId}.json`
+      ];
+      
+      for (const fileName of files) {
+        try {
+          await piperDir.getFileHandle(fileName);
+          // Already in cache, skip
+        } catch (e) {
+          console.log(`Seeding OPFS cache for ${fileName} from local server...`);
+          
+          const res = await fetch(`/voices/${fileName}`);
+          if (!res.ok) throw new Error(`Failed to fetch ${fileName} from local server`);
+          
+          const reader = res.body.getReader();
+          const contentLength = +(res.headers.get('Content-Length') || 0);
+          let receivedLength = 0;
+          let chunks = [];
+          
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            receivedLength += value.length;
+            if (contentLength > 0) {
+              const percent = Math.round(receivedLength * 100 / contentLength);
+              setLocalNeuralProgress(percent);
+            }
+          }
+          
+          const blob = new Blob(chunks);
+          const fileHandle = await piperDir.getFileHandle(fileName, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          console.log(`Successfully seeded OPFS cache for ${fileName}`);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to seed OPFS cache:', err);
+    }
+  };
+
   const speakLocalNeural = async (text, voiceId) => {
     if (audioElement) {
       try {
@@ -347,6 +396,9 @@ function App() {
       setIsPlayingAudio(true);
       setCurrentSpeakingText(text);
       setLocalNeuralProgress(0);
+      
+      // 1. Seed OPFS cache from local server first!
+      await seedOpfsCache(voiceId);
       
       const vits = await import('@diffusionstudio/vits-web');
       
