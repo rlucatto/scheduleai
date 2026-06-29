@@ -40,6 +40,10 @@ try {
   console.log('[DB] Falling back to local JSON files.');
 }
 
+let isPrefsMigrated = false;
+let isTokensMigrated = false;
+let isTagsMigrated = false;
+
 // ----------------- Preferences -----------------
 export const getDBPreferences = async (defaultPrefs) => {
   if (isFirebaseInitialized) {
@@ -49,7 +53,8 @@ export const getDBPreferences = async (defaultPrefs) => {
         return { ...defaultPrefs, ...doc.data() };
       } else {
         // First run after Firebase is enabled: Migrate local preferences to Firestore
-        if (fs.existsSync(PREFS_FILE)) {
+        if (fs.existsSync(PREFS_FILE) && !isPrefsMigrated) {
+          isPrefsMigrated = true;
           try {
             const content = fs.readFileSync(PREFS_FILE, 'utf8');
             const localPrefs = JSON.parse(content);
@@ -103,7 +108,8 @@ export const getDBTokens = async () => {
         return doc.data();
       } else {
         // Migrate local tokens to Firestore
-        if (fs.existsSync(TOKENS_FILE)) {
+        if (fs.existsSync(TOKENS_FILE) && !isTokensMigrated) {
+          isTokensMigrated = true;
           try {
             const content = fs.readFileSync(TOKENS_FILE, 'utf8');
             const localTokens = JSON.parse(content);
@@ -176,7 +182,8 @@ export const getDBTags = async (defaultState) => {
         return doc.data();
       } else {
         // Migrate local tags to Firestore
-        if (fs.existsSync(TAGS_FILE)) {
+        if (fs.existsSync(TAGS_FILE) && !isTagsMigrated) {
+          isTagsMigrated = true;
           try {
             const content = fs.readFileSync(TAGS_FILE, 'utf8');
             const localTags = JSON.parse(content);
