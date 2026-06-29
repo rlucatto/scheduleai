@@ -205,6 +205,7 @@ function App() {
   const [canDrag, setCanDrag] = useState(false);
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [localNeuralProgress, setLocalNeuralProgress] = useState(null);
   const [activeSecondTab, setActiveSecondTab] = useState('agenda');
   const [tasks, setTasks] = useState([]);
   const [contacts, setContacts] = useState([]);
@@ -330,6 +331,78 @@ function App() {
     window.speechSynthesis.speak(utterance);
   };
 
+  const speakLocalNeural = async (text, voiceId) => {
+    if (audioElement) {
+      try {
+        audioElement.pause();
+      } catch (e) {}
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+    setCurrentSpeakingText('');
+
+    try {
+      setIsPlayingAudio(true);
+      setCurrentSpeakingText(text);
+      setLocalNeuralProgress(0);
+      
+      const vits = await import('@diffusionstudio/vits-web');
+      
+      const cleanText = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+      
+      const wav = await vits.predict({
+        text: cleanText,
+        voiceId: voiceId
+      }, (progress) => {
+        if (progress.total > 0) {
+          const percent = Math.round(progress.loaded * 100 / progress.total);
+          setLocalNeuralProgress(percent);
+        }
+      });
+      
+      setLocalNeuralProgress(null);
+      
+      const audioUrl = URL.createObjectURL(wav);
+      const audio = new Audio(audioUrl);
+      
+      audio.onplay = () => {
+        setIsPlayingAudio(true);
+        setCurrentSpeakingText(text);
+      };
+      
+      audio.onended = () => {
+        setIsPlayingAudio(false);
+        setCurrentSpeakingText('');
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      audio.onpause = () => {
+        setIsPlayingAudio(false);
+        setCurrentSpeakingText('');
+      };
+      
+      audio.onerror = () => {
+        setIsPlayingAudio(false);
+        setCurrentSpeakingText('');
+        URL.revokeObjectURL(audioUrl);
+      };
+      
+      setAudioElement(audio);
+      audio.play().catch(err => {
+        console.warn('[Local Neural TTS] Play blocked/failed:', err);
+      });
+      
+    } catch (err) {
+      console.error('Error in local neural TTS:', err);
+      setIsPlayingAudio(false);
+      setCurrentSpeakingText('');
+      setLocalNeuralProgress(null);
+      speakBrowser(text, '');
+    }
+  };
+
   const speakText = async (text) => {
     if (!text) return;
     
@@ -346,6 +419,11 @@ function App() {
     
     setIsPlayingAudio(false);
     setCurrentSpeakingText('');
+
+    if (preferences.ttsMode === 'local-neural') {
+      speakLocalNeural(text, preferences.ttsVoice || 'pt_BR-faber-medium');
+      return;
+    }
 
     if (preferences.ttsMode === 'browser') {
       speakBrowser(text, preferences.ttsVoice);
@@ -420,6 +498,16 @@ function App() {
     }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
+    }
+
+    if (preferences.ttsMode === 'local-neural') {
+      setIsTestingVoice(true);
+      speakLocalNeural(testText, preferences.ttsVoice || 'pt_BR-faber-medium').then(() => {
+        setIsTestingVoice(false);
+      }).catch(() => {
+        setIsTestingVoice(false);
+      });
+      return;
     }
 
     if (preferences.ttsMode === 'browser') {
@@ -1890,19 +1978,35 @@ function App() {
                   value={preferences.ttsMode || 'gemini'}
                   onChange={e => {
                     const mode = e.target.value;
-                    const defaultVoice = mode === 'gemini' ? 'Puck' : (browserVoices[0]?.name || '');
+                    let defaultVoice = 'Puck';
+                    if (mode === 'browser') {
+                      defaultVoice = browserVoices[0]?.name || '';
+                    } else if (mode === 'local-neural') {
+                      defaultVoice = 'pt_BR-faber-medium';
+                    }
                     setPreferences({...preferences, ttsMode: mode, ttsVoice: defaultVoice});
                   }}
                 >
                   <option value="gemini">☁️ Gemini (Nuvem)</option>
-                  <option value="browser">💻 Navegador (Local - 100% BR)</option>
+                  <option value="browser">💻 Navegador (Local - Voz Padrão)</option>
+                  <option value="local-neural">🎙️ Voz Neural Local (Offline e Realista)</option>
                 </select>
               </div>
 
               <div className="form-group">
                 <label>Voz do Assistente (TTS)</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {(!preferences.ttsMode || preferences.ttsMode === 'gemini') ? (
+                  {preferences.ttsMode === 'local-neural' ? (
+                    <select 
+                      className="form-input"
+                      value={preferences.ttsVoice || 'pt_BR-faber-medium'}
+                      onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
+                      style={{ flex: 1 }}
+                    >
+                      <option value="pt_BR-faber-medium">👦 Lucas (Masculino - Alta Qualidade)</option>
+                      <option value="pt_BR-edresson-low">🧔 Edresson (Masculino Calmo)</option>
+                    </select>
+                  ) : (!preferences.ttsMode || preferences.ttsMode === 'gemini') ? (
                     <select 
                       className="form-input"
                       value={preferences.ttsVoice || 'Puck'}
@@ -2307,24 +2411,29 @@ function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
               <Volume2 size={14} style={{ color: 'var(--accent-hover)', flexShrink: 0 }} />
               <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', flexShrink: 0 }}>Voz:</span>
-              <select
-                value={`${preferences.ttsMode || 'gemini'}:${preferences.ttsVoice || 'Puck'}`}
-                onChange={async (e) => {
-                  const [mode, voice] = e.target.value.split(':');
-                  const updatedPrefs = { ...preferences, ttsMode: mode, ttsVoice: voice };
-                  setPreferences(updatedPrefs);
-                  
-                  // Save automatically to backend
-                  try {
-                    await fetch(`${BACKEND_URL}/api/preferences`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(updatedPrefs)
-                    });
-                  } catch (err) {
-                    console.error('Error saving voice preference:', err);
-                  }
-                }}
+              {localNeuralProgress !== null ? (
+                <span style={{ color: 'var(--accent-hover)', fontWeight: '600', fontSize: '12px', animation: 'pulse 1.5s infinite' }}>
+                  📥 Baixando voz neural: {localNeuralProgress}%
+                </span>
+              ) : (
+                <select
+                  value={`${preferences.ttsMode || 'gemini'}:${preferences.ttsVoice || 'Puck'}`}
+                  onChange={async (e) => {
+                    const [mode, voice] = e.target.value.split(':');
+                    const updatedPrefs = { ...preferences, ttsMode: mode, ttsVoice: voice };
+                    setPreferences(updatedPrefs);
+                    
+                    // Save automatically to backend
+                    try {
+                      await fetch(`${BACKEND_URL}/api/preferences`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updatedPrefs)
+                      });
+                    } catch (err) {
+                      console.error('Error saving voice preference:', err);
+                    }
+                  }}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -2347,7 +2456,11 @@ function App() {
                   <option value="gemini:Fenrir" style={{ background: '#18181b', color: 'white' }}>Fenrir (Masculino Profundo)</option>
                   <option value="gemini:Aoede" style={{ background: '#18181b', color: 'white' }}>Aoede (Feminino Brilhante)</option>
                 </optgroup>
-                <optgroup label="💻 Navegador (Local - 100% BR)">
+                <optgroup label="🎙️ Voz Neural Local (Offline)">
+                  <option value="local-neural:pt_BR-faber-medium" style={{ background: '#18181b', color: 'white' }}>👦 Lucas (Alta Qualidade)</option>
+                  <option value="local-neural:pt_BR-edresson-low" style={{ background: '#18181b', color: 'white' }}>🧔 Edresson (Calmo)</option>
+                </optgroup>
+                <optgroup label="💻 Navegador (Local - Voz Padrão)">
                   {browserVoices.length === 0 ? (
                     <option value="browser:" disabled style={{ background: '#18181b', color: 'var(--text-secondary)' }}>Nenhuma voz local encontrada</option>
                   ) : (
@@ -2359,6 +2472,7 @@ function App() {
                   )}
                 </optgroup>
               </select>
+              )}
             </div>
             
             {isPlayingAudio && (
