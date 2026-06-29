@@ -292,7 +292,7 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
             console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Quota/Limit). Blacklisting this key for 1 hour.`);
             active.keyInfo.blacklistedUntil = Date.now() + 60 * 60 * 1000; // 1 hour
           } else {
-            throw error; // Fail immediately on structural/auth errors
+            console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Structural/Auth):`, error.message);
           }
         }
       }
@@ -300,6 +300,8 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
       if (success) {
         lastModelUsed = modelName;
         return { ...resultValue, modelUsed: modelName };
+      } else {
+        console.warn(`[FALLBACK] Model "${modelName}" failed on all available keys. Trying next model...`);
       }
     }
   }

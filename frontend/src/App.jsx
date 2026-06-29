@@ -554,7 +554,7 @@ function App() {
   // Fetch models health status sequentially (to prevent VRAM overload)
   const fetchModelHealth = async () => {
     setIsCheckingHealth(true);
-    const currentModels = preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    const currentModels = preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
     
     // Create copy of current state
     const newState = { ...modelHealth };
@@ -659,7 +659,7 @@ function App() {
         .then(res => res.json())
         .then(localModelsData => {
           setLocalModels(localModelsData);
-          const existingPriority = finalPrefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
+          const existingPriority = finalPrefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
           const mergedPriority = [...existingPriority];
           localModelsData.forEach(model => {
             if (!mergedPriority.includes(model)) {
@@ -1284,7 +1284,7 @@ function App() {
 
   // Move model priority up/down
   const moveModel = (index, direction) => {
-    const updated = [...(preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'])];
+    const updated = [...(preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'])];
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= updated.length) return;
     
@@ -1300,7 +1300,7 @@ function App() {
 
   // Remove model from priority list
   const removeModel = (index) => {
-    const updated = [...(preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'])];
+    const updated = [...(preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'])];
     updated.splice(index, 1);
     setPreferences({
       ...preferences,
@@ -1326,7 +1326,7 @@ function App() {
     e.preventDefault();
     const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
     if (!isNaN(sourceIndex) && sourceIndex !== index) {
-      const list = [...(preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'])];
+      const list = [...(preferences.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'])];
       const draggedItem = list[sourceIndex];
       list.splice(sourceIndex, 1);
       list.splice(index, 0, draggedItem);
