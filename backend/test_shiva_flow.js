@@ -40,7 +40,7 @@ try {
   console.log('- Did NOT call create_calendar_event yet:', !calledCreateEvent ? 'PASS' : 'FAIL');
 
   // Delay to prevent rate limit
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 4000));
 
   // Test Case 2: Provide the hour, check for proximity warning.
   // Tomorrow's date:
@@ -70,7 +70,7 @@ try {
   console.log('- Warning about proximity/conflict present in response:', hasConflictWarning ? 'PASS' : 'FAIL');
 
   // Delay to prevent rate limit
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 4000));
 
   // Test Case 3: "preciso ir no shiva amanhã" but with scenario shiva_no_address.
   // It should fall back to internet search / search grounding.

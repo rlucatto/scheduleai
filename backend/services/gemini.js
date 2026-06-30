@@ -354,10 +354,11 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
         } catch (error) {
           const errorMsg = error.message || '';
           if (errorMsg.includes('429') || errorMsg.includes('Quota exceeded') || errorMsg.includes('quota') || errorMsg.includes('503')) {
-            console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Quota/Limit). Blacklisting this key for 1 hour.`);
-            active.keyInfo.blacklistedUntil = Date.now() + 60 * 60 * 1000; // 1 hour
+            console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Quota/Limit). Blacklisting this key for 60 seconds.`);
+            active.keyInfo.blacklistedUntil = Date.now() + 60 * 1000; // 60 seconds (RPM reset window)
           } else {
-            console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Structural/Auth):`, error.message);
+            console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Structural/Auth/Empty):`, error.message);
+            active.keyInfo.blacklistedUntil = Date.now() + 30 * 1000; // 30 seconds temporary blacklist to force rotation
           }
         }
       }
@@ -457,7 +458,7 @@ Regras de atuação:
       4. Ao criar o compromisso B (via 'create_calendar_event'), defina o horário de início ('startTime') calculado como: 'Término do Evento A + Tempo de Trânsito' (sem adicionar minutos de antecedência).
       5. Na descrição ('description') do novo evento B, você DEVE incluir obrigatoriamente no início o texto '[depends_on:NOME_OU_ID_DO_EVENTO_A]' (ex: '[depends_on:Ir na Zigrid]'). Isso avisa o sistema para reajustar B dinamicamente se A mudar.
       6. Avise o usuário amigavelmente de que o compromisso foi agendado de forma flexível e que o horário se reajustará automaticamente de acordo com o trânsito e o compromisso anterior.
-    - **Ordem de Busca e Silêncio (CONTATOS PRIMEIRO)**: Quando o usuário pedir para ir a um local ou ver uma pessoa (ex: "ir no Shiva", "visitar a Zigrid", "ir no Sudhir"), você DEVE obrigatoriamente chamar a ferramenta 'search_contacts' com o nome na primeira resposta de forma 100% silenciosa. Se o contato for encontrado e possuir endereço cadastrado, você DEVE utilizar esse endereço do contato e chamar a ferramenta 'check_travel_time' com ele. NÃO faça buscas na internet nem use outros locais públicos com nomes semelhantes caso o contato correspondente seja encontrado com um endereço.
+    - **Ordem de Busca e Silêncio (CONTATOS PRIMEIRO)**: Quando o usuário pedir para ir a um local ou ver uma pessoa (ex: "ir no Shiva", "visitar a Zigrid", "ir no Sudhir"), você DEVE chamar a ferramenta 'search_contacts' com o nome na primeira resposta de forma 100% silenciosa (sem gerar nenhum texto). Se o contato for encontrado e possuir endereço cadastrado (ou se apenas um deles tiver endereço cadastrado entre homônimos), você DEVE utilizar esse endereço. Sempre que o endereço e o horário do compromisso forem conhecidos, chame as ferramentas 'check_travel_time', 'list_calendar_events' e 'create_calendar_event' (com confirmed: false) antes de responder com texto ao usuário (nunca proponha o agendamento no texto sem antes executar essas três ferramentas). Se após a busca de contatos o endereço ou o horário ainda não forem conhecidos, responda ao usuário solicitando amigavelmente as informações necessárias que faltam.
     - **Horário Omitido e Memória**: Se o usuário NÃO informou o horário do compromisso e esse horário não consta nas mensagens anteriores do histórico (você DEVE sempre verificar o histórico da conversa para reaproveitar horários ou datas informados anteriormente, como "hoje às 2 pm"), peça o horário na sua resposta para prosseguir. Caso contrário, use o horário que o usuário já informou anteriormente sem perguntar de novo.
     - **Show/Evento Público**: Se for show/evento público, use a busca para achar local/horário de início. Defina início padrão (21:00) e término padrão (3h de duração) se omitidos. Chame 'check_travel_time' (com destino do show) in paralelo com 'create_calendar_event'.
     - **Conflito e Agenda Silenciosos**: A verificação de compromissos existentes com 'list_calendar_events' deve ser 100% silenciosa. NÃO escreva mensagens dizendo que vai analisar a agenda ou que olhou sua agenda e está livre (evite falas como "Massa! Olhei sua agenda..."). Se não houver conflito de horário, continue silenciosamente o fluxo de agendamento sem comentar que a agenda está vazia ou livre. Apenas avise sobre compromissos se de fato houver um conflito ou proximidade de horários real (com diferença menor ou igual a 1 hora de início/fim).
@@ -1537,6 +1538,9 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
         });
 
         let result = await chat.sendMessage(message);
+        if (!result.response.candidates || result.response.candidates.length === 0 || !result.response.candidates[0].content || !result.response.candidates[0].content.parts || result.response.candidates[0].content.parts.length === 0) {
+          throw new Error('Gemini API returned empty response candidates (possible rate limit/throttle).');
+        }
         console.log("[AI] Raw model response:", JSON.stringify(result.response, null, 2));
         let responseText = '';
         try {
@@ -1684,6 +1688,9 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
 
           console.log(`[AI] Sending tool responses for turn ${turns}...`);
           result = await chat.sendMessage(toolResponses);
+          if (!result.response.candidates || result.response.candidates.length === 0 || !result.response.candidates[0].content || !result.response.candidates[0].content.parts || result.response.candidates[0].content.parts.length === 0) {
+            throw new Error('Gemini API returned empty response candidates (possible rate limit/throttle).');
+          }
           toolCalls = result.response.functionCalls() || [];
           try {
             const nextText = result.response.text();
