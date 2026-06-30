@@ -73,7 +73,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
         PendingIntent refreshPendingIntent = PendingIntent.getBroadcast(context, 0, refreshIntent, flags);
         views.setOnClickPendingIntent(R.id.btn_refresh, refreshPendingIntent);
 
-        views.setTextViewText(R.id.txt_status, "Atualizando cronograma...");
+        views.setTextViewText(R.id.txt_status, "v1.2 - Atualizando...");
         appWidgetManager.updateAppWidget(appWidgetId, views);
 
         final PendingResult pendingResult = goAsync();
@@ -92,7 +92,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                         populateWidgetUI(context, appWidgetManager, appWidgetId, views, data);
                         
                         SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
-                        views.setTextViewText(R.id.txt_status, "Atualizado às " + sdf.format(new Date()));
+                        views.setTextViewText(R.id.txt_status, "v1.2 - Atualizado às " + sdf.format(new Date()));
                     } else {
                         String errMsg = "Falha ao carregar dados";
                         if (data != null) {
@@ -103,14 +103,14 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                         }
                         views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap(errMsg));
                         hideAllEventRows(views);
-                        views.setTextViewText(R.id.txt_status, errMsg);
+                        views.setTextViewText(R.id.txt_status, "v1.2 - " + errMsg);
                     }
                     appWidgetManager.updateAppWidget(appWidgetId, views);
                 } catch (Throwable e) {
                     e.printStackTrace();
                     views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap(e.getMessage() != null ? e.getMessage() : "Erro desconhecido"));
                     hideAllEventRows(views);
-                    views.setTextViewText(R.id.txt_status, "Erro de atualização");
+                    views.setTextViewText(R.id.txt_status, "v1.2 - Erro: " + (e.getMessage() != null ? e.getMessage() : "Erro desconhecido"));
                     appWidgetManager.updateAppWidget(appWidgetId, views);
                 } finally {
                     if (pendingResult != null) {
