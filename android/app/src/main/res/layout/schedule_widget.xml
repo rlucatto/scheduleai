@@ -28,7 +28,7 @@
             android:id="@+id/btn_refresh"
             android:layout_width="28dp"
             android:layout_height="28dp"
-            android:background="?android:attr/selectableItemBackground"
+            android:background="@android:color/transparent"
             android:src="@android:drawable/ic_popup_sync"
             android:contentDescription="Atualizar" />
     </LinearLayout>
@@ -59,35 +59,35 @@
                 android:id="@+id/click_before"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="#00FFFFFF"
+                android:background="@android:color/transparent"
                 android:clickable="true" />
 
             <View
                 android:id="@+id/click_prep"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="#00FFFFFF"
+                android:background="@android:color/transparent"
                 android:clickable="true" />
 
             <View
                 android:id="@+id/click_travel"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="#00FFFFFF"
+                android:background="@android:color/transparent"
                 android:clickable="true" />
 
             <View
                 android:id="@+id/click_event"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="#00FFFFFF"
+                android:background="@android:color/transparent"
                 android:clickable="true" />
 
             <View
                 android:id="@+id/click_after"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:background="#00FFFFFF"
+                android:background="@android:color/transparent"
                 android:clickable="true" />
         </LinearLayout>
     </FrameLayout>
@@ -108,10 +108,11 @@
             android:id="@+id/row_event_1"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingVertical="3dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
             android:visibility="gone"
             android:clickable="true"
-            android:background="?android:attr/selectableItemBackground">
+            android:background="@android:color/transparent">
             
             <ImageView
                 android:id="@+id/dot_event_1"
@@ -155,7 +156,7 @@
                 android:textColor="#AAAAAA"
                 android:textSize="10sp"
                 android:clickable="true"
-                android:background="?android:attr/selectableItemBackground" />
+                android:background="@android:color/transparent" />
         </RelativeLayout>
 
         <!-- Row 2 -->
@@ -163,10 +164,11 @@
             android:id="@+id/row_event_2"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingVertical="3dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
             android:visibility="gone"
             android:clickable="true"
-            android:background="?android:attr/selectableItemBackground">
+            android:background="@android:color/transparent">
             
             <ImageView
                 android:id="@+id/dot_event_2"
@@ -210,7 +212,7 @@
                 android:textColor="#AAAAAA"
                 android:textSize="10sp"
                 android:clickable="true"
-                android:background="?android:attr/selectableItemBackground" />
+                android:background="@android:color/transparent" />
         </RelativeLayout>
 
         <!-- Row 3 -->
@@ -218,10 +220,11 @@
             android:id="@+id/row_event_3"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingVertical="3dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
             android:visibility="gone"
             android:clickable="true"
-            android:background="?android:attr/selectableItemBackground">
+            android:background="@android:color/transparent">
             
             <ImageView
                 android:id="@+id/dot_event_3"
@@ -265,7 +268,7 @@
                 android:textColor="#AAAAAA"
                 android:textSize="10sp"
                 android:clickable="true"
-                android:background="?android:attr/selectableItemBackground" />
+                android:background="@android:color/transparent" />
         </RelativeLayout>
     </LinearLayout>
 
