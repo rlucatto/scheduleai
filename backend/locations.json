@@ -1,0 +1,191 @@
+[
+  {
+    "date": "2026-06-30",
+    "time": "00:30:21",
+    "timestamp": "2026-06-30T05:30:21.589Z",
+    "latitude": -23.561,
+    "longitude": -46.655,
+    "address": "R. Prof. Picarolo, 619 - Bela Vista, São Paulo - SP, 01332-020, Brasil",
+    "observations": "Estabelecimento: Rua São Carlos do Pinhal, 900"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:30:21",
+    "timestamp": "2026-06-30T05:30:21.780Z",
+    "latitude": 0,
+    "longitude": 0,
+    "address": "Latitude: 0, Longitude: 0",
+    "observations": ""
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:30:36",
+    "timestamp": "2026-06-30T05:30:36.464Z",
+    "latitude": -23.561,
+    "longitude": -46.655,
+    "address": "R. Prof. Picarolo, 619 - Bela Vista, São Paulo - SP, 01332-020, Brasil",
+    "observations": "Estabelecimento: Rua São Carlos do Pinhal, 900"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:30:36",
+    "timestamp": "2026-06-30T05:30:36.672Z",
+    "latitude": 0,
+    "longitude": 0,
+    "address": "Latitude: 0, Longitude: 0",
+    "observations": ""
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:32:38",
+    "timestamp": "2026-06-30T05:32:38.713Z",
+    "latitude": 42.040928,
+    "longitude": -87.701927,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:32:38",
+    "timestamp": "2026-06-30T05:32:38.894Z",
+    "latitude": 42.040928,
+    "longitude": -87.701927,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:32:38",
+    "timestamp": "2026-06-30T05:32:38.941Z",
+    "latitude": 42.040928,
+    "longitude": -87.701927,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:32:38",
+    "timestamp": "2026-06-30T05:32:38.941Z",
+    "latitude": 42.040928,
+    "longitude": -87.701927,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:33:50",
+    "timestamp": "2026-06-30T05:33:50.562Z",
+    "latitude": 42.040928,
+    "longitude": -87.701927,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:33:50",
+    "timestamp": "2026-06-30T05:33:50.819Z",
+    "latitude": 42.040928,
+    "longitude": -87.701927,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:37:29",
+    "timestamp": "2026-06-30T05:37:29.670Z",
+    "latitude": -23.561,
+    "longitude": -46.655,
+    "address": "R. Prof. Picarolo, 619 - Bela Vista, São Paulo - SP, 01332-020, Brasil",
+    "observations": "Estabelecimento: Rua São Carlos do Pinhal, 900"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:37:30",
+    "timestamp": "2026-06-30T05:37:30.154Z",
+    "latitude": -23.58,
+    "longitude": -46.68,
+    "address": "R. Baviera, 8 - Pinheiros, São Paulo - SP, 01448-060, Brasil",
+    "observations": "Estabelecimento: R. Baviera, 10"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:41:07",
+    "timestamp": "2026-06-30T05:41:07.058Z",
+    "latitude": 41.964,
+    "longitude": -87.716,
+    "address": "4534 N St Louis Ave, Chicago, IL 60625, EUA",
+    "observations": "Estabelecimento: 4523 N Drake Ave #2, Chicago, IL 60625, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:41:47",
+    "timestamp": "2026-06-30T05:41:47.654Z",
+    "latitude": -23.561,
+    "longitude": -46.655,
+    "address": "R. Prof. Picarolo, 619 - Bela Vista, São Paulo - SP, 01332-020, Brasil",
+    "observations": "Estabelecimento: Rua São Carlos do Pinhal, 900"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:41:48",
+    "timestamp": "2026-06-30T05:41:48.181Z",
+    "latitude": 41.964,
+    "longitude": -87.716,
+    "address": "4534 N St Louis Ave, Chicago, IL 60625, EUA",
+    "observations": "Estabelecimento: 4523 N Drake Ave #2, Chicago, IL 60625, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:41:57",
+    "timestamp": "2026-06-30T05:41:57.675Z",
+    "latitude": -23.561,
+    "longitude": -46.655,
+    "address": "R. Prof. Picarolo, 619 - Bela Vista, São Paulo - SP, 01332-020, Brasil",
+    "observations": "Estabelecimento: Rua São Carlos do Pinhal, 900"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:41:58",
+    "timestamp": "2026-06-30T05:41:58.247Z",
+    "latitude": 41.964372,
+    "longitude": -87.711014,
+    "address": "4544 N Spaulding Ave, Chicago, IL 60625, EUA",
+    "observations": "Estabelecimento: 4544 N Spaulding Ave, Chicago, IL 60625, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:42:39",
+    "timestamp": "2026-06-30T05:42:39.348Z",
+    "latitude": -23.561,
+    "longitude": -46.655,
+    "address": "R. Prof. Picarolo, 619 - Bela Vista, São Paulo - SP, 01332-020, Brasil",
+    "observations": "Estabelecimento: Rua São Carlos do Pinhal, 900"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:42:39",
+    "timestamp": "2026-06-30T05:42:39.809Z",
+    "latitude": 41.964372,
+    "longitude": -87.711014,
+    "address": "4544 N Spaulding Ave, Chicago, IL 60625, EUA",
+    "observations": "Estabelecimento: 4544 N Spaulding Ave, Chicago, IL 60625, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:43:48",
+    "timestamp": "2026-06-30T05:43:48.160Z",
+    "latitude": 42.040931,
+    "longitude": -87.701916,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-06-30",
+    "time": "00:43:48",
+    "timestamp": "2026-06-30T05:43:48.375Z",
+    "latitude": 42.040931,
+    "longitude": -87.701916,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  }
+]

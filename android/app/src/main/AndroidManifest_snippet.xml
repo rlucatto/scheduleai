@@ -1,0 +1,15 @@
+<!-- AndroidManifest.xml Merge Snippet -->
+<!-- Copie e cole os elementos abaixo dentro da tag <application> do seu AndroidManifest.xml -->
+
+<receiver
+    android:name="com.scheduleai.app.ScheduleWidgetProvider"
+    android:exported="true"
+    android:label="ScheduleAI Cronograma">
+    <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        <action android:name="com.scheduleai.app.ACTION_REFRESH_WIDGET" />
+    </intent-filter>
+    <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/schedule_widget_info" />
+</receiver>

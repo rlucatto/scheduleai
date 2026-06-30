@@ -242,3 +242,83 @@ export const getTimezoneFromCoords = async (coordsOrAddress) => {
   return 'America/Sao_Paulo';
 };
 
+export const reverseGeocodeWithEstablishment = async (lat, lng) => {
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  const latlngStr = `${lat},${lng}`;
+  
+  let address = `Latitude: ${lat}, Longitude: ${lng}`;
+  let establishment = null;
+
+  if (mapsKey && mapsKey !== 'your_google_maps_api_key_here') {
+    try {
+      const response = await axios.get(
+        'https://maps.googleapis.com/maps/api/geocode/json',
+        {
+          params: {
+            latlng: latlngStr,
+            key: mapsKey,
+            language: 'pt-BR'
+          }
+        }
+      );
+      if (response.data.status === 'OK' && response.data.results && response.data.results.length > 0) {
+        // Find best street address
+        let bestResult = response.data.results.find(r => 
+          r.types.includes('street_address') || 
+          r.address_components.some(c => c.types.includes('street_number'))
+        ) || response.data.results[0];
+
+        address = bestResult.formatted_address;
+
+        // Check if there is an establishment in any of the results
+        const establishmentResult = response.data.results.find(r => 
+          r.types.includes('establishment') || 
+          r.types.includes('point_of_interest') ||
+          r.types.includes('store') ||
+          r.types.includes('restaurant')
+        );
+
+        if (establishmentResult) {
+          const formatted = establishmentResult.formatted_address;
+          const parts = formatted.split(' - ');
+          establishment = parts[0].trim();
+        }
+      }
+    } catch (error) {
+      console.error('Error in reverseGeocodeWithEstablishment:', error.message);
+    }
+  } else {
+    // Mock Mode fallback
+    const numericLat = parseFloat(lat);
+    const numericLng = parseFloat(lng);
+    if (Math.abs(numericLat - (-23.561)) < 0.05 && Math.abs(numericLng - (-46.655)) < 0.05) {
+      address = 'Av. Paulista, 1000 - Bela Vista, São Paulo - SP, 01310-100';
+      establishment = 'Shopping Cidade São Paulo';
+    } else if (Math.abs(numericLat - 41.96) < 0.1 && Math.abs(numericLng - (-87.72)) < 0.1) {
+      address = '4544 N Spaulding Ave, Chicago, IL 60625';
+      establishment = 'Zigrid Cafe';
+    } else if (Math.abs(numericLat - 42.16) < 0.1 && Math.abs(numericLng - (-87.97)) < 0.1) {
+      address = '609 Caren Dr, Buffalo Grove, IL 60089';
+      establishment = 'Sudhir Tech Consulting';
+    } else {
+      address = `Rua Simulada de Teste, 123, São Paulo - SP`;
+    }
+  }
+
+  return { address, establishment };
+};
+
+export const getHaversineDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // meters
+  const rlat1 = lat1 * Math.PI / 180;
+  const rlat2 = lat2 * Math.PI / 180;
+  const dlat = (lat2 - lat1) * Math.PI / 180;
+  const dlon = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(dlat / 2) * Math.sin(dlat / 2) +
+            Math.cos(rlat1) * Math.cos(rlat2) *
+            Math.sin(dlon / 2) * Math.sin(dlon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // distance in meters
+};
+

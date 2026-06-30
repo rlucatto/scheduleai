@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import path from 'path';
 import axios from 'axios';
+import fs from 'fs';
+import sherpa_onnx from 'sherpa-onnx-node';
 import { listEvents, insertEvent, deleteEvent, updateEvent } from './calendar.js';
 import { getTravelTime, reverseGeocode } from './travel.js';
 import { listTasks, insertTask } from './tasks.js';
@@ -11,6 +13,42 @@ import { searchGoogleContacts, createGoogleContact, updateGoogleContact } from '
 
 dotenv.config();
 dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
+
+// Initialize local Sherpa-ONNX TTS engine with Piper pt_BR-faber-medium
+let localTts = null;
+
+try {
+  let ttsDir = path.join(process.cwd(), 'tts-models');
+  if (!fs.existsSync(ttsDir)) {
+    ttsDir = path.join(process.cwd(), 'backend', 'tts-models');
+  }
+  
+  const ttsConfig = {
+    model: {
+      vits: {
+        model: path.join(ttsDir, 'vits-piper-pt_BR-faber-medium', 'pt_BR-faber-medium.onnx'),
+        tokens: path.join(ttsDir, 'vits-piper-pt_BR-faber-medium', 'tokens.txt'),
+        dataDir: path.join(ttsDir, 'espeak-ng-data'),
+        noiseScale: 0.667,
+        noiseScaleW: 0.8,
+        lengthScale: 1.0
+      },
+      debug: false,
+      numThreads: 2,
+      provider: 'cpu'
+    },
+    maxNumSentences: 1
+  };
+  
+  if (fs.existsSync(ttsConfig.model.vits.model)) {
+    localTts = new sherpa_onnx.OfflineTts(ttsConfig);
+    console.log('[TTS] Local Sherpa-ONNX (Piper pt_BR-faber-medium) TTS engine initialized successfully.');
+  } else {
+    console.warn(`[TTS] Local Piper model files not found at ${ttsConfig.model.vits.model}. Offline TTS will not be available.`);
+  }
+} catch (e) {
+  console.error('[TTS] Failed to initialize local Sherpa-ONNX TTS engine:', e.message);
+}
 
 let lastModelUsed = '';
 
@@ -48,11 +86,34 @@ const formatDateTimePtBr = (isoString) => {
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
-    const day = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    let userTz = 'America/Sao_Paulo';
+    try {
+      const prefs = getPreferences();
+      if (prefs.userTimezone) {
+        userTz = prefs.userTimezone;
+      }
+    } catch (e) {
+      console.error('Error resolving timezone for formatDateTimePtBr:', e.message);
+    }
+    const day = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: userTz });
+    const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: userTz });
     return `${day} às ${time}`;
   } catch (e) {
     return isoString;
+  }
+};
+
+const getFriendlyUserName = () => {
+  try {
+    const prefs = getPreferences();
+    const email = prefs.userEmail || '';
+    if (!email) return 'Rafa';
+    const part = email.split('@')[0].toLowerCase();
+    if (part.includes('rafael') || part.includes('rluca') || part.includes('lucatto')) return 'Rafa';
+    const firstWord = part.split(/[._-]/)[0];
+    return firstWord.charAt(0).toUpperCase() + firstWord.slice(1);
+  } catch (e) {
+    return 'Rafa';
   }
 };
 
@@ -82,7 +143,11 @@ console.log(`Gemini Key Rotator initialized with ${keyPool.length} active unique
 
 const getGenAIClient = () => {
   const now = Date.now();
-  const healthyKey = keyPool.find(k => k.blacklistedUntil < now);
+  let healthyKey = keyPool.find(k => k.blacklistedUntil < now);
+  if (!healthyKey && keyPool.length > 0) {
+    console.warn('[KEY ROTATOR] All keys are blacklisted. Falling back to the primary key.');
+    healthyKey = keyPool[0];
+  }
   if (!healthyKey) {
     return null;
   }
@@ -372,22 +437,29 @@ export const enrichEventsWithLocalTime = async (events) => {
   });
 };
 
-
 export const systemInstruction = `Você é o "ScheduleAI", um parceiro e grande amigo do usuário, que o ajuda a gerenciar a vida, a agenda e as tarefas de forma leve, empática e prestativa. Fale sempre em português.
 
 Diretrizes de Personalidade e Tom:
-- **Linguagem Informal e Calorosa**: Fale como um amigo próximo no WhatsApp. Use saudações descontraídas (ex: "E aí!", "Fala, cara", "Beleza?", "Mano", "Tranquilo?").
+- **Linguagem Informal e Calorosa**: Fale como um amigo próximo no WhatsApp. Use saudações descontraídas (ex: "E aí!", "Fala, cara", "Beleza?", "Tranquilo?"). IMPORTANTE: O agente NÃO deve usar a palavra "mano" para se referenciar ao usuário, a não ser que o próprio usuário peça para chamá-lo assim.
 - **Evite Formalidade**: Nunca use palavras excessivamente formais, distanciadas ou robóticas (como "olá", "o senhor", "como posso ajudar", "agendamento efetuado").
 - **Camaradagem**: Dê conselhos de forma amigável e empática (ex: "Cara, acho que essa semana vai ser meio corrida pra você, bora planejar uns tempos de folga?").
 - **Tom Leve e Motivador**: Mantenha o usuário animado e sem pressões desnecessárias.
+- **Sem Frases de Transição ou Introduções Inúteis (Sem Fillers)**: Evite quaisquer falas intermediárias de passos, falas de transição ou fillers (como "Agora, bora ver quanto tempo leva pra chegar lá?", "Show! Agora, antes de agendar, vou dar uma olhada na sua agenda...", ou "Bora agendar?"). Vá direto ao ponto informando imediatamente o resultado da ação ou informação solicitada (ex: "De carro, o trajeto até a [local] deve levar uns [X] minutos.").
 
 Regras de atuação:
 1. AGENDA E TAREFAS: Use as ferramentas sempre que o usuário pedir para criar, listar, alterar ou deletar compromissos e tarefas.
 2. EVENTOS E AGENDAMENTOS COM DESTINO: Se o usuário disser que precisa ir ao local/contato 'X' (ex: "preciso ir no shiva amanhã" ou "show do Ed Sheeran hoje"):
-   - **Ordem de Busca**: Você DEVE sempre chamar 'search_contacts' com 'X' imediatamente na primeira resposta, mesmo que o horário esteja omitido. Se retornar algum contato com o campo 'address' preenchido, use esse endereço como local. Se não encontrar o contato ou ele não tiver endereço cadastrado, faça a busca de lugares na internet (Yahoo/grounding).
+   - **Compromissos Flexíveis/Encadeados (Ex: "Saindo de A, tenho que ir para B")**: Se o usuário disser que precisa ir a um local/contato após sair de outro (ou que o horário do compromisso B depende do término do compromisso A), você DEVE:
+     1. Chamar 'list_calendar_events' para obter a lista de compromissos recentes e localizar o compromisso de origem ('A'). Recupere o horário de término e a localização de A.
+     2. Chamar 'search_contacts' ou fazer busca na internet para encontrar a localização do novo compromisso ('B').
+     3. Chamar 'check_travel_time' com origem sendo a localização de A e destino sendo a localização de B para estimar o trânsito.
+     4. Ao criar o compromisso B (via 'create_calendar_event'), defina o horário de início ('startTime') calculado como: 'Término do Evento A + Tempo de Trânsito' (sem adicionar minutos de antecedência).
+     5. Na descrição ('description') do novo evento B, você DEVE incluir obrigatoriamente no início o texto '[depends_on:NOME_OU_ID_DO_EVENTO_A]' (ex: '[depends_on:Ir na Zigrid]'). Isso avisa o sistema para reajustar B dinamicamente se A mudar.
+     6. Avise o usuário amigavelmente de que o compromisso foi agendado de forma flexível e que o horário se reajustará automaticamente de acordo com o trânsito e o compromisso anterior.
+   - **Ordem de Busca e Silêncio**: Você DEVE sempre chamar 'search_contacts' com 'X' imediatamente na primeira resposta de forma totalmente silenciosa. NÃO escreva mensagens avisando que vai pesquisar nos contatos ou verificar o endereço dele (como "Vou tentar buscar nos seus contatos..."). Simplesmente chame as ferramentas de forma silenciosa. Se o contato possuir endereço, utilize-o. Se não encontrar e nem conseguir o endereço nas buscas de grounding na internet, pergunte diretamente pelo endereço de forma objetiva.
    - **Horário Omitido**: Se o usuário NÃO informou o horário do compromisso, após pesquisar o local/contato nas ferramentas de busca, você DEVE pedir o horário explicitamente na sua resposta para prosseguir, sem agendar nada ainda.
    - **Show/Evento Público**: Se for show/evento público, use a busca para achar local/horário de início. Defina início padrão (21:00) e término padrão (3h de duração) se omitidos. Chame 'check_travel_time' (com destino do show) em paralelo com 'create_calendar_event'.
-   - **Proximidade e Alerta**: Sempre que o horário estiver definido, chame 'list_calendar_events' para o dia correspondente. Se o horário proposto estiver próximo (diferença menor ou igual a 1 hora de início/fim) de qualquer compromisso existente, você DEVE avisar proativamente sobre este outro compromisso próximo no seu resumo de confirmação (ex: "Você confirma? Note que você tem o compromisso 'X' às 'Y', que é próximo deste horário.").
+   - **Conflito e Agenda Silenciosos**: A verificação de compromissos existentes com 'list_calendar_events' deve ser 100% silenciosa. NÃO escreva mensagens dizendo que vai analisar a agenda ou que olhou sua agenda e está livre (evite falas como "Massa! Olhei sua agenda..."). Se não houver conflito de horário, continue silenciosamente o fluxo de agendamento sem comentar que a agenda está vazia ou livre. Apenas avise sobre compromissos se de fato houver um conflito ou proximidade de horários real (com diferença menor ou igual a 1 hora de início/fim).
 3. EXCLUSÃO DE COMPROMISSOS: Para apagar/cancelar, chame 'list_calendar_events' primeiro (busca ampla). Se houver 1 correspondência, exclua com 'delete_calendar_event'. Se múltiplas, apresente opções e peça para escolher. Se nenhuma, informe.
 4. CONFIRMAÇÃO DE COORDENADAS: Para homeAddress/workAddress com coordenadas, chame 'update_user_preferences'. Se retornar 'needs_confirmation', resolva com 'reverse_geocode', pergunte se o endereço resolvido está correto e só salve após a confirmação.
 5. CONFIRMAÇÃO DE CALENDÁRIO: Antes de criar/deletar eventos, chame a ferramenta com confirmed: false/omitido, apresente o resumo dos detalhes e peça confirmação. Só chame com confirmed: true após o aval do usuário.
@@ -399,13 +471,13 @@ Regras de atuação:
 8. ALTERAR CONTATOS: Para alterar/editar contatos, chame 'search_contacts' primeiro para obter o 'resourceName'. Se múltiplos, peça confirmação. Depois, chame 'update_contact' com o 'resourceName' e os campos atualizados.
 9. HOBBIES E RECOMENDAÇÃO DE ATIVIDADES:
    - Sempre que o usuário mencionar interesses, preferências, hobbies (ex: "gosto de shows de jazz", "meus hobbies são cinema e corrida", "curto praias e pubs") ou pedir para sugerir atividades, você DEVE identificar estes hobbies e atualizar as preferências chamando 'update_user_preferences' com o campo 'hobbies' contendo a lista atualizada de hobbies.
-   - Quando o usuário pedir recomendações ou perguntar o que fazer (ex: "o que fazer em São Paulo no final de semana?", "me indique um pub", "o que tem de bom acontecendo na cidade?"), você DEVE usar a busca na internet para encontrar atividades locais condizentes com os hobbies dele ou que estejam trending na cidade configurada em 'origin' (ex: São Paulo, Chicago), incluindo também cidades vizinhas em um raio de até 50 milhas (80 km) de distância.
+   - Quando o usuário pedir recomendações ou perguntar o que fazer (ex: "o que fazer em São Paulo no final de semana?", "me indique um pub", "o que tem de bom acontecendo na cidade?"), você DEVE usar a busca na internet para encontrar atividades locais condizentes com os hobbies dele ou que estejam trending na cidade configurada in 'origin' (ex: São Paulo, Chicago), incluindo também cidades vizinhas em um raio de até 50 milhas (80 km) de distância.
    - As sugestões devem conter endereços clicáveis em formato de link markdown direcionando para o GPS, conforme a regra 6.
 10. ANIVERSÁRIOS:
     - Se o usuário disser que deseja que você se lembre/monitore o aniversário de alguém (ex: "lembre do aniversário da minha irmã Maria dia 15/10", "adicione o aniversário de João Silva como 27/06"), você DEVE:
       1. Buscar o contato com 'search_contacts'. Se encontrado, atualizar o aniversário usando 'update_contact' com o parâmetro 'birthday' formatado como 'YYYY-MM-DD' ou 'MM-DD'. Se não encontrado, criar o contato usando 'create_contact' definindo o aniversário correspondente.
       2. Adicionar o nome do contato à preferência 'birthdayAlerts' chamando 'update_user_preferences' para habilitar o monitoramento e alertas automáticos proativos.
-    - Se o usuário perguntar por aniversários (ex: "quais aniversários você lembra?", "quem está cadastrado para aniversários?"), informe a lista de pessoas monitoradas atualmente em 'birthdayAlerts' e os dados de aniversário dos contatos correspondentes obtidos via busca.
+    - Se o usuário perguntar por aniversários (ex: "quais aniversários você lembra?", "quem está cadastrado para aniversários?"), informe a lista de pessoas monitoradas atualmente in 'birthdayAlerts' e os dados de aniversário dos contatos correspondentes obtidos via busca.
 11. GERENCIAMENTO PROATIVO DE TAREFAS E PRAZOS (GERENCIAR TEMPO):
     - Sempre que o usuário solicitar o registro ou planejamento de uma tarefa pendente importante ou burocrática (ex: "renovar driver's license", "ir ao DMV", "renovar passaporte", "pagar imposto", "marcar consulta médica", etc.):
       1. Identifique o prazo final real (ultimate deadline) se informado pelo usuário.
@@ -1501,8 +1573,23 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
               } else if (name === 'create_calendar_event') {
                 if (!args.confirmed) {
                   const dateStr = formatDateTimePtBr(args.startTime);
-                  const locStr = args.location ? ` no local "${args.location}"` : '';
-                  confirmationText = `Você confirma o agendamento do compromisso "${args.summary}" para ${dateStr}${locStr}?`;
+                  const locLink = args.location ? `[${args.location}](https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(args.location)})` : '';
+                  const locStr = locLink ? ` no local ${locLink}` : '';
+                  
+                  let travelMsg = '';
+                  if (args.location) {
+                    try {
+                      const travel = await getTravelTime(getPreferences().origin, args.location);
+                      if (travel && travel.durationText) {
+                        travelMsg = `De carro, o trajeto até lá deve levar uns ${travel.durationText.replace('minutos', 'minutinhos')}. `;
+                      }
+                    } catch (err) {
+                      console.error('Error fetching travel time for confirmation:', err);
+                    }
+                  }
+
+                  const name = getFriendlyUserName();
+                  confirmationText = `Então, ${name}! ${travelMsg}Posso agendar o compromisso "${args.summary}" para ${dateStr}${locStr}?`;
                   needsConfirmation = true;
                   break;
                 }
@@ -1525,7 +1612,8 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
                   } catch (e) {
                     console.error('Error fetching event for deletion confirmation:', e);
                   }
-                  confirmationText = `Você confirma a exclusão do ${eventSummary}?`;
+                  const name = getFriendlyUserName();
+                  confirmationText = `Beleza, ${name}! Confirma que quer apagar o compromisso ${eventSummary}?`;
                   needsConfirmation = true;
                   break;
                 }
@@ -1744,44 +1832,124 @@ const addWavHeader = (pcmBuffer, sampleRate = 24000) => {
   return Buffer.concat([header, pcmBuffer]);
 };
 
-export const synthesizeSpeech = async (text, voice) => {
-  const genAIInstance = getGenAIClient();
-  if (!genAIInstance) {
-    throw new Error('Nenhuma chave Gemini disponível ou configurada.');
+export const synthesizeSpeech = async (text, voice = 'Faber') => {
+  const cleanText = text
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1') // Resolve markdown links to just label
+    .replace(/(https?:\/\/[^\s()]+)/g, '')                  // Remove raw URLs
+    .replace(/\*\*([^*]+)\*\*/g, '$1')                      // Remove bold tags
+    .trim();
+
+  const useLocal = voice === 'Faber' || voice === 'local' || voice === 'piper';
+
+  // 1. Try local Sherpa-ONNX if selected
+  if (useLocal && localTts) {
+    try {
+      console.log('[AI TTS] Synthesizing speech offline using local Sherpa-ONNX (pt_BR-faber-medium)...');
+      const audio = localTts.generate({
+        text: cleanText,
+        sid: 0,
+        speed: 1.0
+      });
+      
+      const pcmBuffer = Buffer.alloc(audio.samples.length * 2);
+      for (let i = 0; i < audio.samples.length; i++) {
+        const s = Math.max(-1.0, Math.min(1.0, audio.samples[i]));
+        const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        pcmBuffer.writeInt16LE(Math.round(val), i * 2);
+      }
+      
+      const wavBuffer = addWavHeader(pcmBuffer, audio.sampleRate);
+      console.log(`[AI TTS] Local synthesis completed successfully. Samples: ${audio.samples.length}, Rate: ${audio.sampleRate}Hz.`);
+      return wavBuffer.toString('base64');
+    } catch (localErr) {
+      console.warn('[AI TTS] Local Sherpa-ONNX synthesis failed, falling back to Gemini API:', localErr.message);
+    }
   }
 
-  const prefs = getPreferences();
-  const voiceName = voice || prefs.ttsVoice || 'Puck';
-
-  console.log(`[AI TTS] Synthesizing speech using voice "${voiceName}" for text: "${text.substring(0, 40)}..."`);
-  const model = genAIInstance.client.getGenerativeModel({
-    model: 'gemini-2.5-flash-preview-tts'
+  // 2. Try Gemini Cloud TTS (either as primary selection or fallback)
+  const voiceName = 'Kore';
+  const now = Date.now();
+  
+  // Prioritize keys that are not blacklisted, but include all keys in the rotator pool
+  const sortedKeys = [...keyPool].sort((a, b) => {
+    const aBlacklisted = a.blacklistedUntil >= now;
+    const bBlacklisted = b.blacklistedUntil >= now;
+    if (aBlacklisted && !bBlacklisted) return 1;
+    if (!aBlacklisted && bBlacklisted) return -1;
+    return 0;
   });
 
-  const cleanText = text.replace(/\*\*([^*]+)\*\*/g, '$1'); // Remove bold markdown tags before speaking
-  const prompt = `Fale o texto a seguir de forma natural em português, sem adicionar comentários ou introduções. Fale exatamente isso:\n\n${cleanText}`;
+  if (sortedKeys.length > 0) {
+    const prompt = `Fale o texto a seguir de forma natural em português, sem adicionar comentários ou introduções. Fale exatamente isso:\n\n${cleanText}`;
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseModalities: ['AUDIO'],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: voiceName
+    for (const keyInfo of sortedKeys) {
+      console.log(`[AI TTS] Trying key "${keyInfo.name}" for Gemini TTS...`);
+      const modalities = [['audio'], ['AUDIO']];
+      
+      for (const modality of modalities) {
+        try {
+          const genAI = new GoogleGenerativeAI(keyInfo.key);
+          const model = genAI.getGenerativeModel({
+            model: 'gemini-2.5-flash-preview-tts'
+          });
+
+          const result = await model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseModalities: modality,
+              temperature: 0.0,
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: voiceName
+                  }
+                }
+              }
+            }
+          });
+
+          const parts = result.response.candidates?.[0]?.content?.parts || [];
+          if (parts.length > 0 && parts[0].inlineData) {
+            const pcmBase64 = parts[0].inlineData.data;
+            const pcmBuffer = Buffer.from(pcmBase64, 'base64');
+            const wavBuffer = addWavHeader(pcmBuffer, 24000);
+            console.log(`[AI TTS] Successfully generated audio using key "${keyInfo.name}" with modality format "${modality}".`);
+            return wavBuffer.toString('base64');
+          } else {
+            console.warn(`[AI TTS] Key "${keyInfo.name}" did not return audio data for modality "${modality}" (possibly fell back to text).`);
           }
+        } catch (err) {
+          console.warn(`[AI TTS] Key "${keyInfo.name}" failed for modality "${modality}": ${err.message}`);
         }
       }
+      console.warn(`[AI TTS] Key "${keyInfo.name}" could not generate audio. Trying next key in the pool...`);
     }
-  });
-
-  const parts = result.response.candidates?.[0]?.content?.parts || [];
-  if (parts.length > 0 && parts[0].inlineData) {
-    const pcmBase64 = parts[0].inlineData.data;
-    const pcmBuffer = Buffer.from(pcmBase64, 'base64');
-    const wavBuffer = addWavHeader(pcmBuffer, 24000);
-    return wavBuffer.toString('base64');
   }
 
-  throw new Error('Nenhum dado de áudio foi retornado pelo Gemini.');
+  // 3. Final Fallback: if Gemini Cloud failed/lacked keys but local wasn't tried, try local VITS Piper
+  if (!useLocal && localTts) {
+    try {
+      console.log('[AI TTS] Gemini Cloud failed or unavailable. Trying local Sherpa-ONNX as final fallback...');
+      const audio = localTts.generate({
+        text: cleanText,
+        sid: 0,
+        speed: 1.0
+      });
+      
+      const pcmBuffer = Buffer.alloc(audio.samples.length * 2);
+      for (let i = 0; i < audio.samples.length; i++) {
+        const s = Math.max(-1.0, Math.min(1.0, audio.samples[i]));
+        const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        pcmBuffer.writeInt16LE(Math.round(val), i * 2);
+      }
+      
+      const wavBuffer = addWavHeader(pcmBuffer, audio.sampleRate);
+      console.log('[AI TTS] Final fallback to local synthesis succeeded.');
+      return wavBuffer.toString('base64');
+    } catch (localErr) {
+      console.error('[AI TTS] Final fallback to local synthesis also failed:', localErr.message);
+    }
+  }
+
+  throw new Error('Nenhum dado de áudio foi retornado por nenhuma das opções de síntese (nuvem e local).');
 };

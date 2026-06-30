@@ -7,6 +7,7 @@ import {
   Clock, 
   Send, 
   User, 
+  Plus,
   Sparkles, 
   LogOut, 
   Link2, 
@@ -34,13 +35,20 @@ import {
   Cake,
   Tag,
   Star,
-  Edit2
+  Edit2,
+  Download
 } from 'lucide-react';
 
 const parseBold = (text) => {
   return text.split('**').map((chunk, cIdx) => {
     return cIdx % 2 === 1 ? <strong key={`bold-${cIdx}`}>{chunk}</strong> : chunk;
   });
+};
+
+const parseDateSafe = (dateVal) => {
+  if (!dateVal) return null;
+  const d = new Date(dateVal);
+  return isNaN(d.getTime()) ? null : d;
 };
 
 const renderFormattedMessage = (text) => {
@@ -128,9 +136,39 @@ const renderFormattedMessage = (text) => {
   });
 };
 
+let googleMapsLoadingPromise = null;
+
+const loadGoogleMapsScript = (apiKey) => {
+  if (window.google && window.google.maps) {
+    return Promise.resolve(window.google.maps);
+  }
+  if (googleMapsLoadingPromise) {
+    return googleMapsLoadingPromise;
+  }
+
+  googleMapsLoadingPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve(window.google.maps);
+    script.onerror = (err) => {
+      googleMapsLoadingPromise = null;
+      reject(err);
+    };
+    document.head.appendChild(script);
+  });
+
+  return googleMapsLoadingPromise;
+};
+
 const getBackendUrl = () => {
   const saved = localStorage.getItem('backend_url');
   if (saved) return saved;
+  
+  if (window.Capacitor) {
+    return 'https://scheduleai-hz68.onrender.com';
+  }
   
   const hostname = window.location.hostname;
   const protocol = window.location.protocol;
@@ -148,6 +186,68 @@ const getBackendUrl = () => {
 };
 
 const BACKEND_URL = getBackendUrl();
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+const registerPush = async (backendUrl) => {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.log('Push messaging is not supported in this browser.');
+    return;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    
+    if (!subscription) {
+      const res = await fetch(`${backendUrl}/api/push/public-key`);
+      const { publicKey } = await res.json();
+      if (!publicKey) {
+        console.warn('VAPID public key not found on server.');
+        return;
+      }
+
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+    }
+
+    await fetch(`${backendUrl}/api/push/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription })
+    });
+    console.log('Web Push subscription registered on backend successfully.');
+  } catch (err) {
+    console.error('Error during push registration:', err);
+  }
+};
+
+const getEventColor = (eventId, index) => {
+  const colors = [
+    'hsl(142, 60%, 45%)',  // Emerald Green
+    'hsl(190, 75%, 45%)',  // Teal/Cyan
+    'hsl(325, 70%, 55%)',  // Pink/Rose
+    'hsl(215, 80%, 50%)',  // Royal Blue
+    'hsl(85, 65%, 45%)',   // Lime Green
+    'hsl(350, 70%, 50%)'   // Crimson Red
+  ];
+  return colors[index % colors.length];
+};
 
 function App() {
   const [backendUrlInput, setBackendUrlInput] = useState(() => {
@@ -174,6 +274,7 @@ function App() {
     }
   };
   const [status, setStatus] = useState({ isConfigured: false, isConnected: false, mode: 'mock' });
+  const [googleMapsKey, setGoogleMapsKey] = useState('');
   const [preferences, setPreferences] = useState({
     origin: '',
     homeAddress: '',
@@ -183,7 +284,8 @@ function App() {
     leadTimeMinutes: 15,
     advanceArrivalMinutes: 15,
     ttsMode: 'gemini',
-    ttsVoice: 'Puck',
+    ttsVoice: 'pt-BR-FranciscaNeural',
+    ttsSpeed: 1.0,
     hobbies: '',
     birthdayAlerts: ''
   });
@@ -205,8 +307,202 @@ function App() {
   const [canDrag, setCanDrag] = useState(false);
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [localNeuralProgress, setLocalNeuralProgress] = useState(null);
   const [activeSecondTab, setActiveSecondTab] = useState('agenda');
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [activeTab, setActiveTab] = useState('chat');
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const [selectedLocationDate, setSelectedLocationDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [locationHistory, setLocationHistory] = useState([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  const [showGPSHelpModal, setShowGPSHelpModal] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  const fetchLocationHistory = async (dateStr) => {
+    setIsLoadingLocations(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/location/history?date=${dateStr}`);
+      if (res.ok) {
+        const data = await res.json();
+        setLocationHistory(data);
+      } else {
+        console.error('Failed to fetch location history');
+      }
+    } catch (err) {
+      console.error('Error fetching location history:', err);
+    } finally {
+      setIsLoadingLocations(false);
+    }
+  };
+
+  const navigateDay = (amount) => {
+    const current = new Date(selectedLocationDate + 'T12:00:00');
+    current.setDate(current.getDate() + amount);
+    const nextDateStr = current.toISOString().split('T')[0];
+    setSelectedLocationDate(nextDateStr);
+    fetchLocationHistory(nextDateStr);
+  };
+
+  const mapInstanceRef = useRef(null);
+  const mapContainerRef = useRef(null);
+  const markersRef = useRef([]);
+  const appointmentsContainerRef = useRef(null);
+  const scrolledOnceRef = useRef(false);
+
+  useEffect(() => {
+    if (activeSecondTab !== 'location' || !mapContainerRef.current) {
+      if (mapInstanceRef.current) {
+        markersRef.current.forEach(m => m.setMap(null));
+        markersRef.current = [];
+        mapInstanceRef.current = null;
+      }
+      return;
+    }
+
+    if (!googleMapsKey) {
+      console.warn('Google Maps API Key not available.');
+      return;
+    }
+
+    loadGoogleMapsScript(googleMapsKey).then((googleMaps) => {
+      if (!mapContainerRef.current) return;
+
+      let center = { lat: -23.561, lng: -46.655 }; // default SP
+      if (locationHistory.length > 0) {
+        const lastRec = locationHistory[locationHistory.length - 1];
+        center = { lat: lastRec.latitude, lng: lastRec.longitude };
+      }
+
+      if (!mapInstanceRef.current) {
+        mapInstanceRef.current = new googleMaps.Map(mapContainerRef.current, {
+          center: center,
+          zoom: 13,
+          styles: [
+            { elementType: "geometry", stylers: [{ color: "#1e1e1e" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#1e1e1e" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#aaaaaa" }] },
+            { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+            { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
+            { featureType: "road", elementType: "geometry", stylers: [{ color: "#334155" }] },
+            { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+            { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1e293b" }] }
+          ],
+          disableDefaultUI: false,
+        });
+      } else {
+        mapInstanceRef.current.setCenter(center);
+      }
+
+      const map = mapInstanceRef.current;
+
+      // Clear old markers
+      markersRef.current.forEach((m) => m.setMap(null));
+      markersRef.current = [];
+
+      const bounds = new googleMaps.LatLngBounds();
+
+      locationHistory.forEach((loc, index) => {
+        const isLatest = index === locationHistory.length - 1;
+        const color = isLatest ? '#4f46e5' : '#22c55e'; // Indigo or Green
+
+        const position = { lat: loc.latitude, lng: loc.longitude };
+        bounds.extend(position);
+
+        const marker = new googleMaps.Marker({
+          position: position,
+          map: map,
+          title: `Ponto #${index + 1} - ${loc.time}`,
+          icon: {
+            path: googleMaps.SymbolPath.CIRCLE,
+            fillColor: color,
+            fillOpacity: 0.9,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+            scale: isLatest ? 8 : 6,
+          }
+        });
+
+        const popupContent = `
+          <div style="font-family: sans-serif; color: #1e293b; padding: 4px; min-width: 150px; line-height: 1.4;">
+            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${index + 1} - ${loc.time}</strong>
+            <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${loc.address}</span>
+            ${loc.observations ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${loc.observations}</span>` : ''}
+          </div>
+        `;
+
+        const infowindow = new googleMaps.InfoWindow({
+          content: popupContent,
+        });
+
+        marker.addListener('click', () => {
+          infowindow.open({
+            anchor: marker,
+            map,
+            shouldFocus: false,
+          });
+        });
+
+        markersRef.current.push(marker);
+
+        if (isLatest) {
+          infowindow.open({
+            anchor: marker,
+            map,
+            shouldFocus: false,
+          });
+        }
+      });
+
+      if (locationHistory.length > 0) {
+        if (locationHistory.length === 1) {
+          map.setCenter({ lat: locationHistory[0].latitude, lng: locationHistory[0].longitude });
+          map.setZoom(14);
+        } else {
+          map.fitBounds(bounds);
+        }
+      }
+    }).catch(err => {
+      console.error('Error loading Google Maps:', err);
+    });
+  }, [activeSecondTab, locationHistory, googleMapsKey]);
+
+  useEffect(() => {
+    if (activeTab === 'agenda' && activeSecondTab === 'agenda') {
+      if (!scrolledOnceRef.current && calculations.length > 0) {
+        // Find if there is an active or upcoming event
+        const currentEventId = calculations.find(calc => {
+          const evStart = parseDateSafe(calc.eventStart)?.getTime() || 0;
+          const evEnd = (parseDateSafe(calc.eventEnd) || new Date(evStart + 60 * 60 * 1000)).getTime();
+          return currentTime.getTime() <= evEnd;
+        })?.eventId;
+
+        if (currentEventId) {
+          setTimeout(() => {
+            if (appointmentsContainerRef.current) {
+              const currentCard = appointmentsContainerRef.current.querySelector(`.event-card[data-event-id="${currentEventId}"]`);
+              if (currentCard) {
+                currentCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                scrolledOnceRef.current = true;
+              }
+            }
+          }, 150);
+        } else {
+          scrolledOnceRef.current = true;
+        }
+      }
+    } else {
+      scrolledOnceRef.current = false;
+    }
+  }, [activeTab, activeSecondTab, calculations]);
+
   const [tasks, setTasks] = useState([]);
   const [contacts, setContacts] = useState([]);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
@@ -240,7 +536,6 @@ function App() {
   });
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [activeTab, setActiveTab] = useState('chat');
 
   useEffect(() => {
     const handleResize = () => {
@@ -255,6 +550,17 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(() => {
     return localStorage.getItem('voice_enabled') === 'true';
   });
@@ -262,6 +568,37 @@ function App() {
   const [audioElement, setAudioElement] = useState(null);
   const recognitionRef = useRef(null);
   const handleSendChatRef = useRef(null);
+  const ttsTimerIntervalRef = useRef(null);
+  const [ttsLoadingText, setTtsLoadingText] = useState('');
+  const [ttsElapsedTime, setTtsElapsedTime] = useState(0);
+
+  const startTtsTimer = (text) => {
+    if (ttsTimerIntervalRef.current) {
+      clearInterval(ttsTimerIntervalRef.current);
+    }
+    setTtsLoadingText(text);
+    setTtsElapsedTime(0);
+    const startTime = Date.now();
+    ttsTimerIntervalRef.current = setInterval(() => {
+      setTtsElapsedTime(Date.now() - startTime);
+    }, 100);
+  };
+
+  const freezeTtsTimer = () => {
+    if (ttsTimerIntervalRef.current) {
+      clearInterval(ttsTimerIntervalRef.current);
+      ttsTimerIntervalRef.current = null;
+    }
+  };
+
+  const resetTtsTimer = () => {
+    if (ttsTimerIntervalRef.current) {
+      clearInterval(ttsTimerIntervalRef.current);
+      ttsTimerIntervalRef.current = null;
+    }
+    setTtsLoadingText('');
+    setTtsElapsedTime(0);
+  };
 
   useEffect(() => {
     localStorage.setItem('voice_enabled', isVoiceEnabled);
@@ -272,221 +609,29 @@ function App() {
     handleSendChatRef.current = handleSendChat;
   });
 
-  const [browserVoices, setBrowserVoices] = useState([]);
 
-  useEffect(() => {
-    if (!window.speechSynthesis) return;
-    
-    const updateVoices = () => {
-      const allVoices = window.speechSynthesis.getVoices();
-      // Filter for Portuguese voices (pt-BR or pt-PT)
-      const ptVoices = allVoices.filter(v => 
-        v.lang.toLowerCase().includes('pt-br') || 
-        v.lang.toLowerCase().includes('pt_br') || 
-        v.lang.toLowerCase().includes('pt-pt') || 
-        v.lang.toLowerCase().includes('pt_pt')
-      );
-      setBrowserVoices(ptVoices);
-    };
-
-    updateVoices();
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = updateVoices;
-    }
-  }, []);
-
-  const speakBrowser = (text, voiceName) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    
-    const cleanText = text.replace(/\*\*([^*]+)\*\*/g, '$1');
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'pt-BR';
-    
-    const allVoices = window.speechSynthesis.getVoices();
-    const selectedVoice = allVoices.find(v => v.name === voiceName);
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
-    } else {
-      // Fallback to first pt-BR voice
-      const ptVoice = allVoices.find(v => v.lang.toLowerCase().includes('pt-br') || v.lang.toLowerCase().includes('pt_br'));
-      if (ptVoice) utterance.voice = ptVoice;
-    }
-    
-    utterance.onstart = () => {
-      setIsPlayingAudio(true);
-      setCurrentSpeakingText(text);
-    };
-    
-    utterance.onend = () => {
-      setIsPlayingAudio(false);
-      setCurrentSpeakingText('');
-    };
-    
-    utterance.onerror = () => {
-      setIsPlayingAudio(false);
-      setCurrentSpeakingText('');
-    };
-    
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const seedOpfsCache = async (voiceId) => {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const piperDir = await root.getDirectoryHandle('piper', { create: true });
-      
-      const files = [
-        `${voiceId}`,
-        `${voiceId}.json`
-      ];
-      
-      for (const fileName of files) {
-        try {
-          await piperDir.getFileHandle(fileName);
-          // Already in cache, skip
-        } catch (e) {
-          console.log(`Seeding OPFS cache for ${fileName} from local server...`);
-          
-          const res = await fetch(`/voices/${fileName}`);
-          if (!res.ok) throw new Error(`Failed to fetch ${fileName} from local server`);
-          
-          const reader = res.body.getReader();
-          const contentLength = +(res.headers.get('Content-Length') || 0);
-          let receivedLength = 0;
-          let chunks = [];
-          
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            receivedLength += value.length;
-            if (contentLength > 0) {
-              const percent = Math.round(receivedLength * 100 / contentLength);
-              setLocalNeuralProgress(percent);
-            }
-          }
-          
-          const blob = new Blob(chunks);
-          const fileHandle = await piperDir.getFileHandle(fileName, { create: true });
-          const writable = await fileHandle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          console.log(`Successfully seeded OPFS cache for ${fileName}`);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to seed OPFS cache:', err);
-    }
-  };
-
-  const speakLocalNeural = async (text, voiceId) => {
-    if (audioElement) {
-      try {
-        audioElement.pause();
-      } catch (e) {}
-    }
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    setIsPlayingAudio(false);
-    setCurrentSpeakingText('');
-
-    try {
-      setIsPlayingAudio(true);
-      setCurrentSpeakingText(text);
-      setLocalNeuralProgress(0);
-      
-      // 1. Seed OPFS cache from local server first!
-      await seedOpfsCache(voiceId);
-      
-      const vits = await import('@diffusionstudio/vits-web');
-      
-      const cleanText = text.replace(/\*\*([^*]+)\*\*/g, '$1');
-      
-      const wav = await vits.predict({
-        text: cleanText,
-        voiceId: voiceId
-      }, (progress) => {
-        if (progress.total > 0) {
-          const percent = Math.round(progress.loaded * 100 / progress.total);
-          setLocalNeuralProgress(percent);
-        }
-      });
-      
-      setLocalNeuralProgress(null);
-      
-      const audioUrl = URL.createObjectURL(wav);
-      const audio = new Audio(audioUrl);
-      
-      audio.onplay = () => {
-        setIsPlayingAudio(true);
-        setCurrentSpeakingText(text);
-      };
-      
-      audio.onended = () => {
-        setIsPlayingAudio(false);
-        setCurrentSpeakingText('');
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      audio.onpause = () => {
-        setIsPlayingAudio(false);
-        setCurrentSpeakingText('');
-      };
-      
-      audio.onerror = () => {
-        setIsPlayingAudio(false);
-        setCurrentSpeakingText('');
-        URL.revokeObjectURL(audioUrl);
-      };
-      
-      setAudioElement(audio);
-      audio.play().catch(err => {
-        console.warn('[Local Neural TTS] Play blocked/failed:', err);
-      });
-      
-    } catch (err) {
-      console.error('Error in local neural TTS:', err);
-      setIsPlayingAudio(false);
-      setCurrentSpeakingText('');
-      setLocalNeuralProgress(null);
-      speakBrowser(text, '');
-    }
-  };
 
   const speakText = async (text) => {
     if (!text) return;
     
+    resetTtsTimer();
+    startTtsTimer(text);
+
     // Stop currently playing audio if any
     if (audioElement) {
       try {
         audioElement.pause();
       } catch (e) {}
     }
-    // Cancel browser synthesis
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
     
     setIsPlayingAudio(false);
     setCurrentSpeakingText('');
-
-    if (preferences.ttsMode === 'local-neural') {
-      speakLocalNeural(text, preferences.ttsVoice || 'pt_BR-faber-medium');
-      return;
-    }
-
-    if (preferences.ttsMode === 'browser') {
-      speakBrowser(text, preferences.ttsVoice);
-      return;
-    }
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/assistant/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text, voice: preferences.ttsVoice || 'Faber' })
       });
 
       if (!res.ok) {
@@ -498,32 +643,43 @@ function App() {
         const audioUrl = `data:audio/wav;base64,${data.audio}`;
         const newAudio = new Audio(audioUrl);
         newAudio.onplay = () => {
+          freezeTtsTimer();
           setIsPlayingAudio(true);
           setCurrentSpeakingText(text);
         };
         newAudio.onended = () => {
+          resetTtsTimer();
           setIsPlayingAudio(false);
           setCurrentSpeakingText('');
         };
         newAudio.onpause = () => {
+          resetTtsTimer();
+          setIsPlayingAudio(false);
+          setCurrentSpeakingText('');
+        };
+        newAudio.onerror = () => {
+          resetTtsTimer();
           setIsPlayingAudio(false);
           setCurrentSpeakingText('');
         };
         setAudioElement(newAudio);
+        newAudio.defaultPlaybackRate = preferences.ttsSpeed || 1.0;
+        newAudio.playbackRate = preferences.ttsSpeed || 1.0;
         newAudio.play().catch(e => {
-          console.warn('[TTS] Autoplay blocked, falling back to Web Speech API:', e);
-          speakBrowser(text, preferences.ttsVoice);
+          console.warn('[TTS] Autoplay blocked:', e);
+          resetTtsTimer();
         });
       } else {
         throw new Error('No audio in response');
       }
     } catch (err) {
-      console.warn('[TTS] Gemini TTS failed, falling back to Browser Web Speech API:', err.message);
-      speakBrowser(text, preferences.ttsVoice);
+      console.warn('[TTS] Gemini TTS failed:', err.message);
+      resetTtsTimer();
     }
   };
 
   const stopSpeaking = () => {
+    resetTtsTimer();
     if (audioElement) {
       try {
         audioElement.pause();
@@ -548,31 +704,12 @@ function App() {
         audioElement.pause();
       } catch (e) {}
     }
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-
-    if (preferences.ttsMode === 'local-neural') {
-      setIsTestingVoice(true);
-      speakLocalNeural(testText, preferences.ttsVoice || 'pt_BR-faber-medium').then(() => {
-        setIsTestingVoice(false);
-      }).catch(() => {
-        setIsTestingVoice(false);
-      });
-      return;
-    }
-
-    if (preferences.ttsMode === 'browser') {
-      speakBrowser(testText, preferences.ttsVoice);
-      setIsTestingVoice(false);
-      return;
-    }
 
     try {
       const res = await fetch(`${BACKEND_URL}/api/assistant/tts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: testText, voice: preferences.ttsVoice })
+        body: JSON.stringify({ text: testText, voice: preferences.ttsVoice || 'Faber' })
       });
 
       if (!res.ok) {
@@ -595,17 +732,21 @@ function App() {
           setIsPlayingAudio(false);
           setCurrentSpeakingText('');
         };
+        newAudio.onerror = () => {
+          setIsPlayingAudio(false);
+          setCurrentSpeakingText('');
+        };
         setAudioElement(newAudio);
+        newAudio.defaultPlaybackRate = preferences.ttsSpeed || 1.0;
+        newAudio.playbackRate = preferences.ttsSpeed || 1.0;
         newAudio.play().catch(e => {
-          console.warn('[TTS Test] Autoplay blocked, falling back to browser speak:', e);
-          speakBrowser(testText, preferences.ttsVoice);
+          console.warn('[TTS Test] Autoplay blocked:', e);
         });
       } else {
         throw new Error('No audio returned');
       }
     } catch (err) {
-      console.warn('[TTS Test] Gemini test failed, falling back to Browser TTS:', err.message);
-      speakBrowser(testText, preferences.ttsVoice);
+      console.warn('[TTS Test] Gemini test failed:', err.message);
     } finally {
       setIsTestingVoice(false);
     }
@@ -752,6 +893,9 @@ function App() {
       const res = await fetch(`${BACKEND_URL}/api/auth/status`);
       const data = await res.json();
       setStatus(data.status);
+      if (data.googleMapsApiKey) {
+        setGoogleMapsKey(data.googleMapsApiKey);
+      }
       
       let finalPrefs = data.preferences;
       
@@ -1571,17 +1715,27 @@ function App() {
   const handleDeleteEvent = async (id) => {
     if (!window.confirm('Tem certeza que deseja remover este compromisso?')) return;
     try {
+      // Optimistic UI update: remove from screen immediately
+      setCalculations(prev => prev.filter(c => c.eventId !== id));
+      
       const res = await fetch(`${BACKEND_URL}/api/calendar/events/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const errorData = await res.json();
         throw new Error(errorData.error || 'Erro desconhecido no servidor.');
       }
-      fetchTimeline();
+      
+      // Delay fetch slightly to avoid Google Calendar API race conditions
+      setTimeout(() => {
+        fetchTimeline();
+      }, 800);
+
       // Add feedback chat bubble
       setChatHistory(prev => [...prev, { sender: 'assistant', text: 'Removi o compromisso solicitado da sua agenda.' }]);
     } catch (err) {
       console.error('Error deleting event:', err);
       alert(`Falha ao excluir compromisso: ${err.message}`);
+      // Rollback on failure
+      fetchTimeline();
     }
   };
 
@@ -1589,6 +1743,73 @@ function App() {
   const removeToast = (id) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
+
+  // Periodic User Location Tracking (Smart background GPS watch) - Mobile GPS Only
+  useEffect(() => {
+    const isMobileDevice = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (!isMobileDevice) {
+      console.log('[LOCATION TRACKING] Non-mobile device detected. Skipping GPS tracking.');
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      console.warn('[LOCATION TRACKING] Geolocation is not supported by this browser.');
+      return;
+    }
+
+    let lastPostTime = 0;
+
+    const handleLocationUpdate = async (position) => {
+      const { latitude, longitude } = position.coords;
+      const now = Date.now();
+      
+      // Throttle: only post once every 5 minutes (300,000 ms) to conserve battery
+      if (now - lastPostTime < 5 * 60 * 1000) {
+        console.log('[LOCATION TRACKING] Location watch triggered but throttled (< 5 min).');
+        return;
+      }
+      
+      lastPostTime = now;
+      console.log(`[LOCATION TRACKING] WatchPosition coordinates captured: ${latitude}, ${longitude}`);
+      
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/location/track`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ latitude, longitude })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          console.log('[LOCATION TRACKING] Saved location record:', data.record);
+        } else {
+          console.error('[LOCATION TRACKING] Failed to save location record.');
+        }
+      } catch (err) {
+        console.error('[LOCATION TRACKING] Error sending location:', err);
+      }
+    };
+
+    const handleError = (error) => {
+      console.error('[LOCATION TRACKING] Error retrieving position:', error.message);
+    };
+
+    // Use watchPosition for high-accuracy background tracking
+    const watchId = navigator.geolocation.watchPosition(
+      handleLocationUpdate,
+      handleError,
+      {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
 
   // Setup WebSockets and Load Data
   useEffect(() => {
@@ -1786,10 +2007,42 @@ function App() {
 
     initData();
 
-    // Listen to OS Notification permissions
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
+    // Request notification permission and register for Push
+    const setupNotifications = async () => {
+      if ('Notification' in window) {
+        try {
+          let permission = Notification.permission;
+          if (permission === 'default') {
+            permission = await Notification.requestPermission();
+          }
+          if (permission === 'granted') {
+            const currentUrl = localStorage.getItem('backend_url') || BACKEND_URL;
+            await registerPush(currentUrl);
+          }
+        } catch (e) {
+          console.warn('Error setting up notifications:', e);
+        }
+      }
+    };
+    setupNotifications();
+
+    // Request Capacitor native permissions if running in native wrapper
+    const requestCapacitorPermissions = async () => {
+      if (window.Capacitor && window.Capacitor.Plugins) {
+        try {
+          const { Geolocation, LocalNotifications } = window.Capacitor.Plugins;
+          if (Geolocation) {
+            await Geolocation.requestPermissions().catch(e => console.warn('Geo perm error:', e));
+          }
+          if (LocalNotifications) {
+            await LocalNotifications.requestPermissions().catch(e => console.warn('Notif perm error:', e));
+          }
+        } catch (err) {
+          console.warn('Error requesting Capacitor native permissions:', err);
+        }
+      }
+    };
+    requestCapacitorPermissions();
 
     // Connect socket client
     const socket = io(BACKEND_URL);
@@ -2024,81 +2277,64 @@ function App() {
               </div>
 
               <div className="form-group">
-                <label>Modo de Voz (TTS)</label>
-                <select 
-                  className="form-input"
-                  value={preferences.ttsMode || 'gemini'}
-                  onChange={e => {
-                    const mode = e.target.value;
-                    let defaultVoice = 'Puck';
-                    if (mode === 'browser') {
-                      defaultVoice = browserVoices[0]?.name || '';
-                    } else if (mode === 'local-neural') {
-                      defaultVoice = 'pt_BR-faber-medium';
-                    }
-                    setPreferences({...preferences, ttsMode: mode, ttsVoice: defaultVoice});
-                  }}
-                >
-                  <option value="gemini">☁️ Gemini (Nuvem)</option>
-                  <option value="browser">💻 Navegador (Local - Voz Padrão)</option>
-                  <option value="local-neural">🎙️ Voz Neural Local (Offline e Realista)</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Voz do Assistente (TTS)</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {preferences.ttsMode === 'local-neural' ? (
-                    <select 
-                      className="form-input"
-                      value={preferences.ttsVoice || 'pt_BR-faber-medium'}
-                      onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
-                      style={{ flex: 1 }}
-                    >
-                      <option value="pt_BR-cadu-medium">👦 Cadu (Masculino - Médio)</option>
-                      <option value="pt_BR-edresson-low">🧔 Edresson (Masculino Calmo)</option>
-                      <option value="pt_BR-faber-medium">👦 Faber (Masculino - Alta Qualidade)</option>
-                      <option value="pt_BR-jeff-medium">👦 Jeff (Masculino - Médio)</option>
-                    </select>
-                  ) : (!preferences.ttsMode || preferences.ttsMode === 'gemini') ? (
-                    <select 
-                      className="form-input"
-                      value={preferences.ttsVoice || 'Puck'}
-                      onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
-                      style={{ flex: 1 }}
-                    >
-                      <option value="Puck">👦 Puck (Masculino - Padrão)</option>
-                      <option value="Charon">👨 Charon (Masculino Calmo)</option>
-                      <option value="Kore">👩 Kore (Feminino Claro)</option>
-                      <option value="Fenrir">🧔 Fenrir (Masculino Profundo)</option>
-                      <option value="Aoede">👧 Aoede (Feminino Brilhante)</option>
-                    </select>
-                  ) : (
-                    <select 
-                      className="form-input"
-                      value={preferences.ttsVoice || ''}
-                      onChange={e => setPreferences({...preferences, ttsVoice: e.target.value})}
-                      style={{ flex: 1 }}
-                    >
-                      {browserVoices.length === 0 ? (
-                        <option value="">Nenhuma voz pt-BR encontrada no sistema</option>
-                      ) : (
-                        browserVoices.map(v => (
-                          <option key={v.name} value={v.name}>{v.name} ({v.lang})</option>
-                        ))
-                      )}
-                    </select>
-                  )}
+                <label>Voz do Assistente</label>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', width: '100%' }}>
+                  <select 
+                    className="form-input" 
+                    style={{ 
+                      flex: 1, 
+                      padding: '8px 12px', 
+                      fontSize: '13px', 
+                      border: '1px solid var(--border-color)', 
+                      background: 'rgba(0,0,0,0.2)', 
+                      color: 'var(--text-primary)', 
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }}
+                    value={preferences.ttsVoice || 'Faber'} 
+                    onChange={async (e) => {
+                      const newVoice = e.target.value;
+                      const updatedPrefs = { ...preferences, ttsVoice: newVoice };
+                      setPreferences(updatedPrefs);
+                      
+                      // Auto-save preference change to backend
+                      try {
+                        await fetch(`${BACKEND_URL}/api/preferences`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(updatedPrefs)
+                        });
+                      } catch (err) {
+                        console.error('Error saving voice preference:', err);
+                      }
+                    }}
+                  >
+                    <option value="Faber">👨 Faber (Masculino - Local / Piper)</option>
+                    <option value="Kore">👩 Kore (Feminino - Gemini Nuvem)</option>
+                  </select>
                   <button
                     type="button"
                     className="btn btn-secondary"
                     onClick={handleTestVoice}
                     disabled={isTestingVoice}
-                    style={{ padding: '0 12px', fontSize: '12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{ padding: '8px 12px', fontSize: '12px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     {isTestingVoice ? 'Ouvindo...' : 'Testar'}
                   </button>
                 </div>
+              </div>
+
+              <div className="form-group">
+                <label>Velocidade da Voz: {(preferences.ttsSpeed || 1.0).toFixed(2)}x</label>
+                <input 
+                  type="range" 
+                  min="0.5" 
+                  max="2.0" 
+                  step="0.05" 
+                  value={preferences.ttsSpeed || 1.0} 
+                  onChange={e => setPreferences({...preferences, ttsSpeed: parseFloat(e.target.value)})}
+                  style={{ width: '100%', height: '6px', cursor: 'pointer' }}
+                />
               </div>
 
               <div className="form-group">
@@ -2363,6 +2599,65 @@ function App() {
           )}
         </div>
 
+        {/* Android APK Download Card */}
+        <div className="card glass" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <h3 className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Download size={16} style={{ color: 'var(--accent-hover)' }} />
+            Instalação do Aplicativo
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+            Para usar o **Widget da Agenda na Tela Inicial** e ter rastreamento GPS preciso em background, é necessário instalar o **APK Nativo**. A versão **PWA (Web App)** é mais leve, mas não suporta Widgets de sistema do Android.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+            {deferredPrompt && (
+              <button 
+                className="btn btn-secondary" 
+                onClick={async () => {
+                  deferredPrompt.prompt();
+                  const { outcome } = await deferredPrompt.userChoice;
+                  console.log(`User response to PWA install prompt: ${outcome}`);
+                  setDeferredPrompt(null);
+                }}
+                style={{ 
+                  fontSize: '12px', 
+                  padding: '8px 12px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '6px', 
+                  width: '100%',
+                  cursor: 'pointer'
+                }}
+              >
+                <Plus size={14} /> Instalar Versão PWA (Leve)
+              </button>
+            )}
+            <button 
+              className="btn btn-primary" 
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = '/scheduleai.apk';
+                link.download = 'scheduleai.apk';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+              style={{ 
+                fontSize: '12px', 
+                padding: '8px 12px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '6px', 
+                width: '100%',
+                cursor: 'pointer'
+              }}
+            >
+              <Download size={14} /> Baixar APK Nativo (Suporta Widget)
+            </button>
+          </div>
+        </div>
+
         {/* Quick actions triggers */}
         <div className="card glass" style={{ marginTop: 'auto' }}>
           <h3 className="section-title">Sugestões Rápidas</h3>
@@ -2395,7 +2690,23 @@ function App() {
               {renderFormattedMessage(msg.text)}
               
               {msg.sender === 'assistant' && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '6px', gap: '8px' }}>
+                  {ttsLoadingText === msg.text && (
+                    <span style={{ 
+                      fontSize: '11px', 
+                      color: 'var(--accent-hover)', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '4px', 
+                      background: 'rgba(255,255,255,0.03)', 
+                      padding: '2px 6px', 
+                      borderRadius: '4px', 
+                      fontWeight: '500'
+                    }}>
+                      <Clock size={11} style={{ opacity: 0.7 }} />
+                      {(ttsElapsedTime / 1000).toFixed(1)}s
+                    </span>
+                  )}
                   {isPlayingAudio && currentSpeakingText === msg.text ? (
                     <button
                       type="button"
@@ -2465,70 +2776,37 @@ function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, minWidth: 0 }}>
               <Volume2 size={14} style={{ color: 'var(--accent-hover)', flexShrink: 0 }} />
               <span style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap', flexShrink: 0 }}>Voz:</span>
-              {localNeuralProgress !== null ? (
-                <span style={{ color: 'var(--accent-hover)', fontWeight: '600', fontSize: '12px', animation: 'pulse 1.5s infinite' }}>
-                  📥 Baixando voz neural: {localNeuralProgress}%
-                </span>
-              ) : (
-                <select
-                  value={`${preferences.ttsMode || 'gemini'}:${preferences.ttsVoice || 'Puck'}`}
-                  onChange={async (e) => {
-                    const [mode, voice] = e.target.value.split(':');
-                    const updatedPrefs = { ...preferences, ttsMode: mode, ttsVoice: voice };
-                    setPreferences(updatedPrefs);
-                    
-                    // Save automatically to backend
-                    try {
-                      await fetch(`${BACKEND_URL}/api/preferences`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(updatedPrefs)
-                      });
-                    } catch (err) {
-                      console.error('Error saving voice preference:', err);
-                    }
-                  }}
+              <select
                 style={{
                   background: 'transparent',
                   border: 'none',
                   color: 'var(--text-primary)',
-                  fontSize: '12px',
                   fontWeight: '500',
-                  outline: 'none',
+                  fontSize: '12px',
                   cursor: 'pointer',
                   padding: '2px 4px',
-                  width: '100%',
-                  textOverflow: 'ellipsis',
-                  overflow: 'hidden',
-                  whiteSpace: 'nowrap'
+                  borderRadius: '4px',
+                  outline: 'none'
+                }}
+                value={preferences.ttsVoice || 'Faber'}
+                onChange={async (e) => {
+                  const newVoice = e.target.value;
+                  const updatedPrefs = { ...preferences, ttsVoice: newVoice };
+                  setPreferences(updatedPrefs);
+                  try {
+                    await fetch(`${BACKEND_URL}/api/preferences`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(updatedPrefs)
+                    });
+                  } catch (err) {
+                    console.error('Error saving voice preference:', err);
+                  }
                 }}
               >
-                <optgroup label="☁️ Gemini (Nuvem)">
-                  <option value="gemini:Puck" style={{ background: '#18181b', color: 'white' }}>Puck (Masculino Padrão)</option>
-                  <option value="gemini:Charon" style={{ background: '#18181b', color: 'white' }}>Charon (Masculino Calmo)</option>
-                  <option value="gemini:Kore" style={{ background: '#18181b', color: 'white' }}>Kore (Feminino Claro)</option>
-                  <option value="gemini:Fenrir" style={{ background: '#18181b', color: 'white' }}>Fenrir (Masculino Profundo)</option>
-                  <option value="gemini:Aoede" style={{ background: '#18181b', color: 'white' }}>Aoede (Feminino Brilhante)</option>
-                </optgroup>
-                <optgroup label="🎙️ Voz Neural Local (Offline)">
-                  <option value="local-neural:pt_BR-cadu-medium" style={{ background: '#18181b', color: 'white' }}>👦 Cadu (Médio)</option>
-                  <option value="local-neural:pt_BR-edresson-low" style={{ background: '#18181b', color: 'white' }}>🧔 Edresson (Calmo)</option>
-                  <option value="local-neural:pt_BR-faber-medium" style={{ background: '#18181b', color: 'white' }}>👦 Faber (Alta Qualidade)</option>
-                  <option value="local-neural:pt_BR-jeff-medium" style={{ background: '#18181b', color: 'white' }}>👦 Jeff (Médio)</option>
-                </optgroup>
-                <optgroup label="💻 Navegador (Local - Voz Padrão)">
-                  {browserVoices.length === 0 ? (
-                    <option value="browser:" disabled style={{ background: '#18181b', color: 'var(--text-secondary)' }}>Nenhuma voz local encontrada</option>
-                  ) : (
-                    browserVoices.map(v => (
-                      <option key={v.name} value={`browser:${v.name}`} style={{ background: '#18181b', color: 'white' }}>
-                        {v.name.replace(/Microsoft|Google/gi, '').trim()} ({v.lang})
-                      </option>
-                    ))
-                  )}
-                </optgroup>
+                <option value="Faber" style={{ background: '#1c1c1e', color: '#fff' }}>Faber (Masculino - Local)</option>
+                <option value="Kore" style={{ background: '#1c1c1e', color: '#fff' }}>Kore (Feminino - Gemini)</option>
               </select>
-              )}
             </div>
             
             {isPlayingAudio && (
@@ -2696,6 +2974,26 @@ function App() {
             <Users size={18} />
             Contatos
           </button>
+          <button 
+            className={`btn-tab ${activeSecondTab === 'location' ? 'active' : ''}`}
+            onClick={() => { setActiveSecondTab('location'); fetchLocationHistory(selectedLocationDate); }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: activeSecondTab === 'location' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+              borderBottom: activeSecondTab === 'location' ? '2px solid var(--accent-hover)' : 'none',
+              paddingBottom: '6px',
+              fontWeight: '600',
+              fontSize: '15px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <MapPin size={18} />
+            Localização
+          </button>
         </div>
 
         {activeSecondTab === 'agenda' ? (
@@ -2710,7 +3008,271 @@ function App() {
               </button>
             </div>
 
-            <div className="timeline-grid">
+            {calculations.length > 0 && (() => {
+              const now = currentTime;
+              const dayEvents = calculations.map((calc, idx) => {
+                const evStart = parseDateSafe(calc.eventStart);
+                if (!evStart) return null;
+                const evEnd = parseDateSafe(calc.eventEnd) || new Date(evStart.getTime() + 60 * 60 * 1000);
+                const departure = parseDateSafe(calc.departureTime) || evStart;
+
+                // Hide prep time if already in transit or arrived
+                const isPastDeparture = now.getTime() > departure.getTime();
+                const hasArrived = calc.description?.includes('[actual_arrival:') || now.getTime() > evStart.getTime();
+                const hidePrep = isPastDeparture || hasArrived;
+
+                const getReady = hidePrep ? departure : (parseDateSafe(calc.getReadyTime) || evStart);
+
+                return {
+                  ...calc,
+                  evStart,
+                  evEnd,
+                  getReady,
+                  departure,
+                  eventColor: getEventColor(calc.eventId, idx)
+                };
+              }).filter(Boolean);
+
+              if (dayEvents.length === 0) return null;
+
+              // Calculate min and max times of the occupied schedule
+              const minTimeMs = Math.min(...dayEvents.map(e => e.getReady.getTime()));
+              const maxTimeMs = Math.max(...dayEvents.map(e => e.evEnd.getTime()));
+              const totalDurationMs = maxTimeMs - minTimeMs;
+
+              const nowMs = now.getTime();
+              const showNowIndicator = nowMs >= minTimeMs && nowMs <= maxTimeMs;
+              const nowPct = showNowIndicator ? ((nowMs - minTimeMs) / totalDurationMs) * 100 : 0;
+
+              const getPctCropped = (date) => {
+                if (!date) return 0;
+                const timeMs = date.getTime();
+                if (totalDurationMs <= 0) return 0;
+                return ((timeMs - minTimeMs) / totalDurationMs) * 100;
+              };
+
+              // Collect transition ticks for the timeline scale
+              const ticks = [];
+              dayEvents.forEach((event) => {
+                ticks.push({ time: event.getReady, pct: getPctCropped(event.getReady) });
+                ticks.push({ time: event.departure, pct: getPctCropped(event.departure) });
+                ticks.push({ time: event.evStart, pct: getPctCropped(event.evStart) });
+                ticks.push({ time: event.evEnd, pct: getPctCropped(event.evEnd) });
+              });
+
+              // Sort and remove duplicate ticks (within 1 minute) to prevent text overlapping
+              const uniqueTicks = [];
+              ticks.sort((a, b) => a.time.getTime() - b.time.getTime());
+              ticks.forEach((tick) => {
+                if (!uniqueTicks.some(t => Math.abs(t.time.getTime() - tick.time.getTime()) < 60 * 1000)) {
+                  uniqueTicks.push(tick);
+                }
+              });
+
+              return (
+                <div className="card glass" style={{ padding: '20px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <h3 style={{ fontSize: '15px', margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Clock size={16} /> Visualização Diária (Horários Ocupados)
+                  </h3>
+                  
+                  {/* Legenda */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'hsl(280, 65%, 60%)' }} />
+                      <span style={{ color: 'var(--text-secondary)' }}>Se arrumar</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: 'hsl(38, 90%, 55%)' }} />
+                      <span style={{ color: 'var(--text-secondary)' }}>Deslocamento</span>
+                    </div>
+                    {dayEvents.map((event) => (
+                      <div key={event.eventId} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: event.eventColor }} />
+                        <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{event.summary}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Grid Gráfico Cropped */}
+                  <div style={{ position: 'relative', height: '48px', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
+                    
+                    {/* Render color segments for all events */}
+                    {dayEvents.map((event) => {
+                      const prepWidth = getPctCropped(event.departure) - getPctCropped(event.getReady);
+                      const transitWidth = getPctCropped(event.evStart) - getPctCropped(event.departure);
+                      const apptWidth = getPctCropped(event.evEnd) - getPctCropped(event.evStart);
+
+                      return (
+                        <React.Fragment key={event.eventId}>
+                          {/* Se arrumar (prep) */}
+                          {prepWidth > 0 && (
+                            <div 
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                height: '32px',
+                                left: `${getPctCropped(event.getReady)}%`,
+                                width: `${prepWidth}%`,
+                                backgroundColor: 'hsl(280, 65%, 60%)',
+                                borderRadius: '4px 0 0 4px',
+                                opacity: 0.85,
+                                zIndex: 2,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#ffffff',
+                                fontSize: '9px',
+                                fontWeight: '700',
+                                textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                overflow: 'hidden'
+                              }}
+                              title={`Se arrumar: ${formatTime(event.getReady)} - ${formatTime(event.departure)}`}
+                            >
+                              <span style={{
+                                width: '100%',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                padding: '0 4px',
+                                display: 'block'
+                              }}>
+                                Se arrumar
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Deslocamento */}
+                          {transitWidth > 0 && (
+                            <div 
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                height: '32px',
+                                left: `${getPctCropped(event.departure)}%`,
+                                width: `${transitWidth}%`,
+                                backgroundColor: 'hsl(38, 90%, 55%)',
+                                opacity: 0.9,
+                                zIndex: 2,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#ffffff',
+                                fontSize: '9px',
+                                fontWeight: '700',
+                                textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                overflow: 'hidden'
+                              }}
+                              title={`Deslocamento: ${formatTime(event.departure)} - ${formatTime(event.evStart)} (${event.travelData?.durationText || ''})`}
+                            >
+                              <span style={{
+                                width: '100%',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                padding: '0 4px',
+                                display: 'block'
+                              }}>
+                                Deslocamento
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Appointment */}
+                          {apptWidth > 0 && (
+                            <div 
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                height: '32px',
+                                left: `${getPctCropped(event.evStart)}%`,
+                                width: `${apptWidth}%`,
+                                backgroundColor: event.eventColor,
+                                borderRadius: transitWidth > 0 ? '0 4px 4px 0' : '4px',
+                                zIndex: 3,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#ffffff',
+                                fontSize: '9px',
+                                fontWeight: '700',
+                                textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                overflow: 'hidden'
+                              }}
+                              title={`${event.summary}: ${formatTime(event.evStart)} - ${formatTime(event.evEnd)}`}
+                            >
+                              <span style={{
+                                width: '100%',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                padding: '0 4px',
+                                display: 'block'
+                              }}>
+                                {event.summary}
+                              </span>
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* Current time indicator line */}
+                    {showNowIndicator && (
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          left: `${nowPct}%`,
+                          top: 0,
+                          bottom: 0,
+                          width: '2px',
+                          backgroundColor: '#ef4444',
+                          boxShadow: '0 0 8px rgba(239, 68, 68, 0.9)',
+                          zIndex: 10,
+                          pointerEvents: 'none'
+                        }}
+                        title={`Agora: ${formatTime(now)}`}
+                      />
+                    )}
+                  </div>
+
+                  {/* Ticks Scale similar to Visual Timeline */}
+                  <div style={{ position: 'relative', height: '18px', fontSize: '9px', color: 'var(--text-secondary)', fontWeight: '500', marginTop: '-8px' }}>
+                    {uniqueTicks.map((tick, tIdx) => {
+                      const isFirst = tIdx === 0;
+                      const isLast = tIdx === uniqueTicks.length - 1;
+                      
+                      return (
+                        <span 
+                          key={tIdx} 
+                          style={{ 
+                            position: 'absolute', 
+                            left: `${tick.pct}%`, 
+                            transform: isFirst ? 'none' : isLast ? 'translateX(-100%)' : 'translateX(-50%)',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {formatTime(tick.time)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div 
+              ref={appointmentsContainerRef}
+              className="timeline-grid"
+              style={{
+                maxHeight: '520px',
+                overflowY: 'auto',
+                paddingRight: '6px',
+                scrollBehavior: 'smooth'
+              }}
+            >
               {calculations.length === 0 ? (
                 <div className="card glass" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
                   <Calendar size={36} />
@@ -2718,11 +3280,16 @@ function App() {
                   <span style={{ fontSize: '12px' }}>Use {isMobile ? 'a aba Conversa' : 'o chat assistente ao lado'} para agendar novos eventos!</span>
                 </div>
               ) : (
-                calculations.map(calc => (
-                  <div key={calc.eventId} className="card event-card has-triggers glass">
+                calculations.map((calc, idx) => (
+                  <div 
+                    key={calc.eventId} 
+                    data-event-id={calc.eventId}
+                    className="card event-card has-triggers glass"
+                    style={{ borderLeft: `4px solid ${getEventColor(calc.eventId, idx)}` }}
+                  >
                     <div className="event-header">
                       <span className="event-time">
-                        {formatDate(calc.eventStart)} - {formatTime(calc.eventStart)}
+                        {(() => { const d = formatDate(calc.eventStart); return d.charAt(0).toUpperCase() + d.slice(1); })()} {formatTime(calc.eventStart)} - {formatTime(calc.eventEnd || new Date(new Date(calc.eventStart).getTime() + 60 * 60 * 1000))}
                       </span>
                       <button className="btn btn-secondary" style={{ padding: '4px', border: 'none', background: 'transparent' }} onClick={() => handleDeleteEvent(calc.eventId)}>
                         <Trash2 size={15} style={{ color: 'var(--danger)' }} />
@@ -2745,29 +3312,192 @@ function App() {
                       </div>
                     )}
 
-                    {calc.location && calc.travelData && (
-                      <div className="trigger-indicator">
-                        <div className="trigger-step" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px', marginBottom: '4px' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Trânsito ({calc.travelData.distanceText}):</span>
-                          <span className="time" style={{ color: 'var(--accent-hover)' }}>{calc.travelData.durationText}</span>
+                    {calc.location && calc.travelData && (() => {
+                      const now = currentTime;
+                      const evStart = parseDateSafe(calc.eventStart);
+                      if (!evStart) return null;
+
+                      const evEnd = parseDateSafe(calc.eventEnd) || new Date(evStart.getTime() + 60 * 60 * 1000);
+                      const departure = parseDateSafe(calc.departureTime) || evStart;
+
+                      // Hide prep time if already in transit or arrived
+                      const isPastDeparture = now.getTime() > departure.getTime();
+                      const hasArrived = calc.description?.includes('[actual_arrival:') || now.getTime() > evStart.getTime();
+                      const hidePrep = isPastDeparture || hasArrived;
+
+                      const getReady = hidePrep ? departure : (parseDateSafe(calc.getReadyTime) || evStart);
+
+                      const prepDur = Math.max(0, Math.round((departure.getTime() - getReady.getTime()) / (60 * 1000)));
+                      const transitDur = Math.max(0, Math.round((evStart.getTime() - departure.getTime()) / (60 * 1000)));
+                      const apptDur = Math.max(0, Math.round((evEnd.getTime() - evStart.getTime()) / (60 * 1000)));
+                      
+                      const totalMinutes = prepDur + transitDur + apptDur;
+                      const prepPct = totalMinutes > 0 ? (prepDur / totalMinutes) * 100 : 0;
+                      const transitPct = totalMinutes > 0 ? (transitDur / totalMinutes) * 100 : 0;
+                      const apptPct = totalMinutes > 0 ? (apptDur / totalMinutes) * 100 : 0;
+                      
+                      const eventStartMs = getReady.getTime();
+                      const eventEndMs = evEnd.getTime();
+                      const eventDurationMs = eventEndMs - eventStartMs;
+                      const isNowInEvent = now.getTime() >= eventStartMs && now.getTime() <= eventEndMs;
+                      const nowEventPct = isNowInEvent && eventDurationMs > 0 
+                        ? ((now.getTime() - eventStartMs) / eventDurationMs) * 100 
+                        : 0;
+                      
+                      const posB = prepPct;
+                      const posC = prepPct + transitPct;
+                      
+                      const eventColor = getEventColor(calc.eventId, idx);
+
+                      return (
+                        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          
+                          {/* Triggers indicator list */}
+                          <div className="trigger-indicator" style={{ marginBottom: '4px' }}>
+                            <div className="trigger-step" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px', marginBottom: '4px' }}>
+                              <span style={{ color: 'var(--text-secondary)' }}>Trânsito ({calc.travelData.distanceText}):</span>
+                              <span className="time" style={{ color: 'var(--accent-hover)' }}>{calc.travelData.durationText}</span>
+                            </div>
+                            <div className="trigger-step">
+                              <span>👔 Se Arrume (1h antes):</span>
+                              <span className="time">{formatTime(getReady)}</span>
+                            </div>
+                            <div className="trigger-step">
+                              <span>🔔 Aviso de Saída (15m antes):</span>
+                              <span className="time">{formatTime(parseDateSafe(calc.warnLeaveTime) || departure)}</span>
+                            </div>
+                            <div className="trigger-step" style={{ fontWeight: 'bold', color: 'var(--success)' }}>
+                              <span>🚗 Horário de Saída:</span>
+                              <span className="time">{formatTime(departure)}</span>
+                            </div>
+                          </div>
+
+                          {/* Graphical Segmented Timeline Bar */}
+                          <div style={{ paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Clock size={11} /> LINHA DO TEMPO VISUAL
+                            </div>
+
+                            {/* Bar segment container */}
+                            <div style={{ position: 'relative', display: 'flex', height: '12px', borderRadius: '3px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', marginBottom: '4px' }}>
+                              {prepPct > 0 && (
+                                <div style={{ width: `${prepPct}%`, backgroundColor: 'hsl(280, 65%, 60%)' }} title={`Se arrumar: ${prepDur} min`} />
+                              )}
+                              {transitPct > 0 && (
+                                <div style={{ width: `${transitPct}%`, backgroundColor: 'hsl(38, 90%, 55%)' }} title={`Deslocamento: ${transitDur} min`} />
+                              )}
+                              {apptPct > 0 && (
+                                <div style={{ width: `${apptPct}%`, backgroundColor: eventColor }} title={`Compromisso: ${apptDur} min`} />
+                              )}
+
+                              {/* Current time indicator line */}
+                              {isNowInEvent && (
+                                <div 
+                                  style={{
+                                    position: 'absolute',
+                                    left: `${nowEventPct}%`,
+                                    top: 0,
+                                    bottom: 0,
+                                    width: '2px',
+                                    backgroundColor: '#ef4444',
+                                    boxShadow: '0 0 6px rgba(239, 68, 68, 0.9)',
+                                    zIndex: 5,
+                                    pointerEvents: 'none'
+                                  }}
+                                  title={`Agora: ${formatTime(now)}`}
+                                />
+                              )}
+                            </div>
+
+                            {/* Timeline hours ticks scale */}
+                            <div style={{ position: 'relative', height: '16px', fontSize: '9px', color: 'var(--text-secondary)', fontWeight: '500', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                              {prepPct > 0 && (
+                                <span style={{ position: 'absolute', left: '0%', transform: 'translateX(0%)' }}>
+                                  {formatTime(getReady)}
+                                </span>
+                              )}
+                              <span style={{ position: 'absolute', left: `${posB}%`, transform: 'translateX(-50%)' }}>
+                                {formatTime(departure)}
+                              </span>
+                              <span style={{ position: 'absolute', left: `${posC}%`, transform: 'translateX(-50%)' }}>
+                                {formatTime(evStart)}
+                              </span>
+                              <span style={{ position: 'absolute', right: '0%', transform: 'translateX(0%)' }}>
+                                {formatTime(evEnd)}
+                              </span>
+                            </div>
+
+                            {/* Phase labels */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px' }}>
+                              {prepPct > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'hsl(280, 65%, 60%)' }} />
+                                    <span style={{ color: 'var(--text-secondary)' }}>Se Arrumar</span>
+                                  </div>
+                                  <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(getReady)} - {formatTime(departure)} ({prepDur}m)</span>
+                                </div>
+                              )}
+                              {transitPct > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'hsl(38, 90%, 55%)' }} />
+                                    <span style={{ color: 'var(--text-secondary)' }}>Deslocamento</span>
+                                  </div>
+                                  <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(departure)} - {formatTime(evStart)} ({transitDur}m)</span>
+                                </div>
+                              )}
+                              {apptPct > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: eventColor }} />
+                                    <span style={{ color: 'var(--text-secondary)' }}>Compromisso</span>
+                                  </div>
+                                  <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(evStart)} - {formatTime(evEnd)} ({apptDur}m)</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
                         </div>
-                        
-                        <div className="trigger-step">
-                          <span>👔 Se Arrume (1h antes):</span>
-                          <span className="time">{formatTime(calc.getReadyTime)}</span>
+                      );
+                    })()}
+
+                    {(() => {
+                      const arrivalMatch = calc.description?.match(/\[actual_arrival:([^\]]+)\]/);
+                      const departureMatch = calc.description?.match(/\[actual_departure:([^\]]+)\]/);
+                      const actualArrival = arrivalMatch ? new Date(arrivalMatch[1]) : null;
+                      const actualDeparture = departureMatch ? new Date(departureMatch[1]) : null;
+
+                      if (!actualArrival && !actualDeparture) return null;
+
+                      return (
+                        <div style={{
+                          marginTop: '12px',
+                          padding: '10px',
+                          background: 'rgba(79, 70, 229, 0.05)',
+                          border: '1px dashed rgba(79, 70, 229, 0.2)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px'
+                        }}>
+                          {actualArrival && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--success)' }}>
+                              <span>📥 Chegada registrada:</span>
+                              <strong>{actualArrival.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</strong>
+                            </div>
+                          )}
+                          {actualDeparture && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-hover)' }}>
+                              <span>📤 Saída registrada:</span>
+                              <strong>{actualDeparture.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</strong>
+                            </div>
+                          )}
                         </div>
-                        
-                        <div className="trigger-step">
-                          <span>🔔 Aviso de Saída (15m antes):</span>
-                          <span className="time">{formatTime(calc.warnLeaveTime)}</span>
-                        </div>
-                        
-                        <div className="trigger-step" style={{ fontWeight: 'bold', color: 'var(--success)' }}>
-                          <span>🚗 Horário de Saída:</span>
-                          <span className="time">{formatTime(calc.departureTime)}</span>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {!calc.location && (
                       <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.01)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
@@ -2878,7 +3608,7 @@ function App() {
               )}
             </div>
           </>
-        ) : (
+        ) : activeSecondTab === 'contacts' ? (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -3217,7 +3947,181 @@ function App() {
               })()}
             </div>
           </>
-        )}
+        ) : activeSecondTab === 'location' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <style>{`
+              @keyframes pin-pulse {
+                0% { transform: scale(0.5); opacity: 0; }
+                50% { opacity: 0.6; }
+                100% { transform: scale(1.8); opacity: 0; }
+              }
+            `}</style>
+            
+            {/* Background Permission Prompt Card */}
+            <div className="card glass" style={{ 
+              padding: '14px', 
+              background: 'rgba(245, 158, 11, 0.07)', 
+              border: '1px solid rgba(245, 158, 11, 0.25)', 
+              borderRadius: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--warning)', fontWeight: '600', fontSize: '13px' }}>
+                <AlertTriangle size={16} />
+                <span>Rastreamento em Background (GPS)</span>
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+                Para registrar de forma contínua seus horários de chegada e saída mesmo com a tela bloqueada, configure a permissão do aplicativo para <strong>"Permitir o Tempo Todo" (Sempre)</strong> nas configurações de localização do celular.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.02)' }}
+                  onClick={() => setShowGPSHelpModal(true)}
+                >
+                  <Info size={12} /> Como ativar permissão "Sempre" no celular
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ padding: '6px 12px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                  onClick={() => {
+                    const startTime = Date.now();
+                    let appOpened = false;
+
+                    const handleVisibility = () => {
+                      if (document.hidden) {
+                        appOpened = true;
+                      }
+                    };
+                    document.addEventListener("visibilitychange", handleVisibility);
+
+                    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+                      window.Capacitor.Plugins.App.openAppSettings().catch(() => {});
+                    } else {
+                      const isAndroid = /Android/i.test(navigator.userAgent);
+                      if (isAndroid) {
+                        // Try opening the specific app settings
+                        window.location.href = "intent:#Intent;action=android.settings.APPLICATION_DETAILS_SETTINGS;data=package:com.scheduleai.app;end";
+                        
+                        // Fallback to global location settings if the app didn't go to background
+                        setTimeout(() => {
+                          document.removeEventListener("visibilitychange", handleVisibility);
+                          if (!appOpened && (Date.now() - startTime) < 2200) {
+                            console.log("App settings intent did not trigger. Falling back to global location settings.");
+                            window.location.href = "intent:#Intent;action=android.settings.LOCATION_SOURCE_SETTINGS;end";
+                          }
+                        }, 1500);
+                      } else {
+                        alert("Para habilitar o rastreamento em segundo plano no iOS: Vá em Ajustes > Privacidade > Serviços de Localização > ScheduleAI e selecione 'Sempre'.");
+                      }
+                    }
+                  }}
+                >
+                  <Settings size={12} /> Abrir Configurações do App
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <MapPin size={20} style={{ color: 'var(--accent-primary)' }} />
+                <h2 style={isMobile ? { fontSize: '18px', margin: 0 } : { margin: 0 }}>Histórico de Localização</h2>
+              </div>
+              
+              {/* Seletor de Data e Navegação */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button className="btn btn-secondary" style={{ padding: '8px 12px' }} onClick={() => navigateDay(-1)}>
+                  Anterior
+                </button>
+                <input 
+                  type="date" 
+                  className="form-input" 
+                  style={{ padding: '6px 12px', fontSize: '14px', width: 'auto', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'var(--text-primary)', borderRadius: '6px' }}
+                  value={selectedLocationDate}
+                  onChange={(e) => {
+                    setSelectedLocationDate(e.target.value);
+                    fetchLocationHistory(e.target.value);
+                  }}
+                />
+                <button className="btn btn-secondary" style={{ padding: '8px 12px' }} onClick={() => navigateDay(1)}>
+                  Próximo
+                </button>
+              </div>
+            </div>
+
+            {/* Container do Mapa */}
+            <div className="card glass" style={{ padding: '12px', position: 'relative', overflow: 'hidden' }}>
+              {isLoadingLocations && (
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, borderRadius: '8px' }}>
+                  <RefreshCw size={24} className="spin-anim" />
+                </div>
+              )}
+              
+              <div 
+                ref={mapContainerRef} 
+                style={{ 
+                  height: '450px', 
+                  width: '100%', 
+                  borderRadius: '6px', 
+                  backgroundColor: '#111', 
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  zIndex: 1
+                }} 
+              />
+            </div>
+
+            {/* Lista de Pontos */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h3 style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: '10px 0 0 0' }}>
+                Pontos Registrados ({locationHistory.length})
+              </h3>
+              
+              {locationHistory.length === 0 ? (
+                <div className="card glass" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '30px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
+                  <MapPin size={24} style={{ marginBottom: '8px' }} />
+                  <span>Nenhum ponto de localização registrado para esta data.</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {locationHistory.map((loc, idx) => (
+                    <div 
+                      key={idx} 
+                      className="card glass" 
+                      style={{ 
+                        padding: '10px 14px', 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        borderLeft: idx === locationHistory.length - 1 ? '3px solid var(--accent-primary)' : '3px solid hsl(142, 60%, 45%)'
+                      }}
+                      onClick={() => {
+                        if (mapInstanceRef.current) {
+                          if (window.google && window.google.maps) {
+                            mapInstanceRef.current.setCenter({ lat: loc.latitude, lng: loc.longitude });
+                            mapInstanceRef.current.setZoom(16);
+                          }
+                        }
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{loc.time} {idx === locationHistory.length - 1 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}</span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.address}</span>
+                      </div>
+                      {loc.observations && (
+                        <span style={{ fontSize: '11px', padding: '2px 8px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: '4px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                          {loc.observations}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </section>
     );
   };
@@ -3680,6 +4584,96 @@ function App() {
                 style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px' }}
               >
                 Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GPS Background Help Modal */}
+      {showGPSHelpModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1100,
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div className="glass" style={{
+            width: '90%',
+            maxWidth: '500px',
+            borderRadius: '16px',
+            border: '1px solid var(--border-color)',
+            background: 'rgba(23, 23, 23, 0.9)',
+            boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+            padding: '24px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            animation: 'scaleUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Navigation size={20} style={{ color: 'var(--accent-hover)' }} />
+                Permissão de GPS "O tempo todo"
+              </h3>
+              <button 
+                onClick={() => setShowGPSHelpModal(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '20px',
+                  lineHeight: '1',
+                  padding: '4px'
+                }}
+              >
+                &times;
+              </button>
+            </div>
+            
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.4' }}>
+              O rastreamento em segundo plano é necessário para o assistente registrar seus horários reais de chegada e saída na agenda de forma autônoma. Siga os passos de configuração abaixo:
+            </p>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🤖 Android</span>
+              </div>
+              <ol style={{ fontSize: '13px', color: 'var(--text-secondary)', paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <li>Abra as <strong>Configurações</strong> do celular.</li>
+                <li>Vá em <strong>Aplicativos</strong> e selecione o navegador usado (ex: Chrome, Edge, Samsung Internet) ou o PWA <strong>ScheduleAI</strong>.</li>
+                <li>Toque em <strong>Permissões</strong> &gt; <strong>Localização</strong>.</li>
+                <li>Selecione a opção <strong>"Permitir o tempo todo"</strong> (Allow all the time) e marque a opção <strong>"Usar localização precisa"</strong>.</li>
+              </ol>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span>🍎 iOS (iPhone)</span>
+              </div>
+              <ol style={{ fontSize: '13px', color: 'var(--text-secondary)', paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <li>Abra os <strong>Ajustes</strong> do iPhone.</li>
+                <li>Vá em <strong>Privacidade e Segurança</strong> &gt; <strong>Serviços de Localização</strong>.</li>
+                <li>Selecione o navegador utilizado (ex: Safari, Chrome) ou o app <strong>ScheduleAI</strong>.</li>
+                <li>Mude a opção para <strong>"Sempre"</strong> (Always) e certifique-se de que a chave <strong>"Localização Precisa"</strong> esteja ativada.</li>
+              </ol>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowGPSHelpModal(false)}
+                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '13px' }}
+              >
+                Entendi
               </button>
             </div>
           </div>

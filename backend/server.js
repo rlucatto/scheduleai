@@ -26,7 +26,8 @@ import {
   stopScheduler, 
   getPreferences, 
   setPreferences, 
-  calculateEventTriggers 
+  calculateEventTriggers,
+  checkLocationArrivalDeparture 
 } from './services/scheduler.js';
 import {
   listTasks,
@@ -50,6 +51,9 @@ import {
   getContactTags,
   updateContactTags
 } from './services/tags.js';
+import { initPushService, getPublicKey } from './services/push.js';
+import { saveDBSubscription, saveDBLocationRecord, getDBLocations } from './services/db.js';
+import { reverseGeocodeWithEstablishment, getHaversineDistance } from './services/travel.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -80,7 +84,8 @@ app.get('/api/auth/status', (req, res) => {
   res.json({
     status: getAuthStatus(),
     preferences: getPreferences(),
-    lastModelUsed: getLastModelUsed()
+    lastModelUsed: getLastModelUsed(),
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
   });
 });
 
@@ -520,7 +525,45 @@ app.delete('/api/calendar/events/:id', async (req, res) => {
 // 4. Calculations (Schedule alerts mapping for frontend)
 app.get('/api/calendar/calculate', async (req, res) => {
   try {
-    const events = await listEvents();
+    const userPreferences = getPreferences();
+    const tz = userPreferences.userTimezone || 'America/Sao_Paulo';
+    
+    // Get start and end of today in the user's local timezone
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const [{ value: mo }, , { value: da }, , { value: ye }] = dtf.formatToParts(new Date());
+    const dateStr = `${ye}-${mo}-${da}`;
+    
+    // Get the timezone offset for the current time
+    const dtfOffset = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'longOffset'
+    });
+    const parts = dtfOffset.formatToParts(new Date());
+    const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value;
+    
+    let offset = '+00:00';
+    if (offsetPart && offsetPart.startsWith('GMT')) {
+      const clean = offsetPart.substring(3);
+      if (clean) {
+        if (clean.includes(':')) {
+          offset = clean;
+        } else {
+          const sign = clean.charAt(0);
+          const val = clean.substring(1);
+          offset = `${sign}${val.padStart(2, '0')}:00`;
+        }
+      }
+    }
+    
+    const timeMin = new Date(`${dateStr}T00:00:00${offset}`).toISOString();
+    const timeMax = new Date(`${dateStr}T23:59:59${offset}`).toISOString();
+
+    const events = await listEvents(timeMin, timeMax);
     const calculations = [];
     
     for (const event of events) {
@@ -531,6 +574,82 @@ app.get('/api/calendar/calculate', async (req, res) => {
     }
     
     res.json(calculations);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4b. Widget data summary for Android home screen widget
+app.get('/api/widget/data', async (req, res) => {
+  try {
+    const { listEvents } = await import('./services/calendar.js');
+    const { calculateEventTriggers } = await import('./services/scheduler.js');
+    
+    const events = await listEvents();
+    const calculations = [];
+    
+    // Sort chronologically
+    const sortedEvents = [...events].sort((a, b) => {
+      const aStart = new Date(a.start?.dateTime || a.start?.date || 0);
+      const bStart = new Date(b.start?.dateTime || b.start?.date || 0);
+      return aStart - bStart;
+    });
+
+    const userPreferences = getPreferences();
+    const origin = userPreferences.origin;
+    let lastEventLocation = origin;
+    let lastEventEndTime = null;
+
+    for (let i = 0; i < sortedEvents.length; i++) {
+      const event = sortedEvents[i];
+      const isConsecutive = lastEventEndTime && (new Date(event.start?.dateTime || event.start?.date).getTime() - lastEventEndTime.getTime() < 4 * 60 * 60 * 1000);
+      const currentOrigin = isConsecutive ? lastEventLocation : origin;
+      const prepTimeOverride = isConsecutive ? 0 : undefined;
+      
+      const calc = await calculateEventTriggers(event, currentOrigin, null, prepTimeOverride);
+      if (calc) {
+        calculations.push(calc);
+        lastEventLocation = event.location || origin;
+        lastEventEndTime = new Date(event.end?.dateTime || event.end?.date || event.start?.dateTime || event.start?.date);
+      }
+    }
+
+    const now = new Date();
+    const colorsList = ['#2563eb', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+    
+    const dayEvents = calculations.map((calc, idx) => {
+      const evStart = new Date(calc.eventStart);
+      const evEnd = calc.eventEnd ? new Date(calc.eventEnd) : new Date(evStart.getTime() + 60 * 60 * 1000);
+      const departure = calc.departureTime ? new Date(calc.departureTime) : evStart;
+      
+      // Hide prep time if already in transit or arrived
+      const isPastDeparture = now.getTime() > departure.getTime();
+      const hasArrived = calc.description?.includes('[actual_arrival:') || now.getTime() > evStart.getTime();
+      const hidePrep = isPastDeparture || hasArrived;
+      const getReady = hidePrep ? departure : (calc.getReadyTime ? new Date(calc.getReadyTime) : evStart);
+
+      return {
+        summary: calc.summary,
+        getReadyTime: getReady.toISOString(),
+        departureTime: departure.toISOString(),
+        eventStartTime: evStart.toISOString(),
+        eventEndTime: evEnd.toISOString(),
+        color: colorsList[idx % colorsList.length]
+      };
+    });
+
+    if (dayEvents.length === 0) {
+      return res.json({ events: [] });
+    }
+
+    const minTimeMs = Math.min(...dayEvents.map(e => new Date(e.getReadyTime).getTime()));
+    const maxTimeMs = Math.max(...dayEvents.map(e => new Date(e.eventEndTime).getTime()));
+
+    res.json({
+      events: dayEvents,
+      minTime: new Date(minTimeMs).toISOString(),
+      maxTime: new Date(maxTimeMs).toISOString()
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -833,6 +952,89 @@ app.get('/api/planning/version', (req, res) => {
   }
 });
 
+// 9. Web Push / PWA Routes
+app.get('/api/push/public-key', (req, res) => {
+  const publicKey = getPublicKey();
+  res.json({ publicKey });
+});
+
+app.post('/api/push/register', async (req, res) => {
+  try {
+    const { subscription } = req.body;
+    if (!subscription || !subscription.endpoint) {
+      return res.status(400).json({ error: 'Subscription object is required' });
+    }
+    await saveDBSubscription(subscription);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/location/track', async (req, res) => {
+  try {
+    const { latitude, longitude } = req.body;
+    if (latitude === undefined || longitude === undefined) {
+      return res.status(400).json({ error: 'Both latitude and longitude are required' });
+    }
+
+    // Check distance to previous point
+    const allLocations = await getDBLocations();
+    if (allLocations && allLocations.length > 0) {
+      const sorted = [...allLocations].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const latest = sorted[0];
+      const dist = getHaversineDistance(
+        parseFloat(latitude), parseFloat(longitude),
+        parseFloat(latest.latitude), parseFloat(latest.longitude)
+      );
+      
+      if (dist < 50) { // 50 meters threshold
+        console.log(`[LOCATION TRACKING] Location too close to last point (${dist.toFixed(1)}m < 50m). Skipping save.`);
+        return res.json({ success: true, skipped: true, reason: 'too_close', distance: dist });
+      }
+    }
+
+    const { address, establishment } = await reverseGeocodeWithEstablishment(latitude, longitude);
+
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toTimeString().split(' ')[0];
+
+    const record = {
+      date: dateStr,
+      time: timeStr,
+      timestamp: now.toISOString(),
+      latitude,
+      longitude,
+      address,
+      observations: establishment ? `Estabelecimento: ${establishment}` : ''
+    };
+
+    await saveDBLocationRecord(record);
+    
+    // Check if user arrived or left any scheduled calendar events
+    await checkLocationArrivalDeparture(latitude, longitude);
+
+    res.json({ success: true, record });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/location/history', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ error: 'Date query parameter is required (YYYY-MM-DD)' });
+    }
+    const allLocations = await getDBLocations();
+    const filtered = allLocations.filter(loc => loc.date === date);
+    res.json(filtered);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Socket Connections
 io.on('connection', (socket) => {
   console.log(`Socket client connected: ${socket.id}`);
@@ -844,6 +1046,9 @@ io.on('connection', (socket) => {
 
 // Start scheduler
 startScheduler(io);
+
+// Initialize Push Service
+await initPushService();
 
 // Start server
 server.listen(PORT, () => {

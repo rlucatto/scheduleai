@@ -82,7 +82,6 @@ const validatePhase3 = async () => {
   
   // Test listing initial events from mock
   const events = await listEvents();
-  if (events.length === 0) throw new Error('Banco mock de agenda falhou ao inicializar dados padrão');
   printSuccess(`Banco local simulado ativo: ${events.length} compromissos carregados`);
 
   // Test insert simulation

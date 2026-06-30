@@ -2,11 +2,15 @@ import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BACKEND_DIR = path.dirname(__dirname);
 
 // Local files for fallback when Firebase is not configured
-const PREFS_FILE = path.join(process.cwd(), 'preferences.json');
-const TAGS_FILE = path.join(process.cwd(), 'tags.json');
-const TOKENS_FILE = path.join(process.cwd(), 'tokens.json');
+const PREFS_FILE = path.join(BACKEND_DIR, 'preferences.json');
+const TAGS_FILE = path.join(BACKEND_DIR, 'tags.json');
+const TOKENS_FILE = path.join(BACKEND_DIR, 'tokens.json');
 
 let db = null;
 let isFirebaseInitialized = false;
@@ -14,7 +18,7 @@ let isFirebaseInitialized = false;
 // Attempt to initialize Firebase Admin SDK
 try {
   const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
-  const localKeyPath = path.join(process.cwd(), 'firebase-key.json');
+  const localKeyPath = path.join(BACKEND_DIR, 'firebase-key.json');
 
   if (serviceAccountVar) {
     console.log('[DB] Initializing Firebase Admin with FIREBASE_SERVICE_ACCOUNT env var...');
@@ -227,3 +231,136 @@ export const saveDBTags = async (tagsData) => {
     console.error('[DB] Error writing tags to local file:', err.message);
   }
 };
+
+// ----------------- Web Push / PWA -----------------
+export const getDBSubscriptions = async () => {
+  if (isFirebaseInitialized) {
+    try {
+      const doc = await db.collection('settings').doc('subscriptions').get();
+      if (doc.exists) {
+        return doc.data().list || [];
+      }
+    } catch (err) {
+      console.error('[DB] Error getting subscriptions from Firestore:', err.message);
+    }
+  }
+  // Local fallback
+  const SUBS_FILE = path.join(BACKEND_DIR, 'subscriptions.json');
+  if (fs.existsSync(SUBS_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(SUBS_FILE, 'utf8'));
+    } catch (e) {
+      console.error('[DB] Error reading subscriptions.json:', e.message);
+    }
+  }
+  return [];
+};
+
+export const saveDBSubscription = async (subscription) => {
+  const current = await getDBSubscriptions();
+  const exists = current.some(sub => sub.endpoint === subscription.endpoint);
+  if (!exists) {
+    current.push(subscription);
+    if (isFirebaseInitialized) {
+      try {
+        await db.collection('settings').doc('subscriptions').set({ list: current });
+        console.log('[DB] Subscription saved successfully to Firestore.');
+      } catch (err) {
+        console.error('[DB] Error saving subscription to Firestore:', err.message);
+      }
+    }
+    // Local fallback
+    const SUBS_FILE = path.join(BACKEND_DIR, 'subscriptions.json');
+    try {
+      fs.writeFileSync(SUBS_FILE, JSON.stringify(current, null, 2), 'utf8');
+    } catch (err) {
+      console.error('[DB] Error writing subscriptions to local file:', err.message);
+    }
+  }
+};
+
+export const getDBVapidKeys = async () => {
+  if (isFirebaseInitialized) {
+    try {
+      const doc = await db.collection('settings').doc('vapid_keys').get();
+      if (doc.exists) {
+        return doc.data();
+      }
+    } catch (err) {
+      console.error('[DB] Error getting VAPID keys from Firestore:', err.message);
+    }
+  }
+  // Local fallback
+  const VAPID_FILE = path.join(BACKEND_DIR, 'vapid_keys.json');
+  if (fs.existsSync(VAPID_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(VAPID_FILE, 'utf8'));
+    } catch (e) {
+      console.error('[DB] Error reading vapid_keys.json:', e.message);
+    }
+  }
+  return null;
+};
+
+export const saveDBVapidKeys = async (keys) => {
+  if (isFirebaseInitialized) {
+    try {
+      await db.collection('settings').doc('vapid_keys').set(keys);
+    } catch (err) {
+      console.error('[DB] Error saving VAPID keys to Firestore:', err.message);
+    }
+  }
+  const VAPID_FILE = path.join(BACKEND_DIR, 'vapid_keys.json');
+  try {
+    fs.writeFileSync(VAPID_FILE, JSON.stringify(keys, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[DB] Error writing VAPID keys to local file:', err.message);
+  }
+};
+
+const LOCATIONS_FILE = path.join(BACKEND_DIR, 'locations.json');
+
+export const saveDBLocationRecord = async (locationRecord) => {
+  if (isFirebaseInitialized) {
+    try {
+      await db.collection('locations').add(locationRecord);
+      console.log('[DB] Location record saved to Firestore.');
+    } catch (err) {
+      console.error('[DB] Error saving location to Firestore:', err.message);
+    }
+  }
+  // Local fallback
+  try {
+    let locations = [];
+    if (fs.existsSync(LOCATIONS_FILE)) {
+      locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, 'utf8'));
+    }
+    locations.push(locationRecord);
+    fs.writeFileSync(LOCATIONS_FILE, JSON.stringify(locations, null, 2), 'utf8');
+    console.log('[DB] Location record saved locally.');
+  } catch (err) {
+    console.error('[DB] Error saving location to local file:', err.message);
+  }
+};
+
+export const getDBLocations = async () => {
+  if (isFirebaseInitialized) {
+    try {
+      const snapshot = await db.collection('locations').get();
+      return snapshot.docs.map(doc => doc.data());
+    } catch (err) {
+      console.error('[DB] Error getting locations from Firestore:', err.message);
+    }
+  }
+  // Local fallback
+  if (fs.existsSync(LOCATIONS_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(LOCATIONS_FILE, 'utf8'));
+    } catch (err) {
+      console.error('[DB] Error reading local locations:', err.message);
+    }
+  }
+  return [];
+};
+
+

@@ -1,0 +1,18 @@
+{
+  "name": "ScheduleAI - Assistente de Agenda Inteligente",
+  "short_name": "ScheduleAI",
+  "description": "Assistente virtual proativo integrado ao Google Calendar com alertas de trânsito em tempo real.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c0a09",
+  "theme_color": "#0c0a09",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

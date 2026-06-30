@@ -1,0 +1,22 @@
+{
+  "origin": "",
+  "homeAddress": "",
+  "workAddress": "",
+  "transportMode": "driving",
+  "prepTimeMinutes": 60,
+  "leadTimeMinutes": 15,
+  "advanceArrivalMinutes": 15,
+  "modelPriority": [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash"
+  ],
+  "ttsMode": "gemini",
+  "ttsVoice": "Puck",
+  "hobbies": "",
+  "birthdayAlerts": "",
+  "userName": "",
+  "agentName": "",
+  "userBirthday": "",
+  "onboardingStep": "welcome",
+  "favoriteTags": "Amigo, Pessoal, Trabalho, Família"
+}
