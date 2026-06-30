@@ -166,7 +166,11 @@ const getBackendUrl = () => {
   const saved = localStorage.getItem('backend_url');
   if (saved) return saved;
   
-  if (window.Capacitor) {
+  const isCapacitor = window.Capacitor || 
+                      (window.location.hostname === 'localhost' && window.location.protocol === 'https:') ||
+                      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                      
+  if (isCapacitor) {
     return 'https://scheduleai-hz68.onrender.com';
   }
   
