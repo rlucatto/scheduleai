@@ -514,14 +514,19 @@ function App() {
 
         if (targetEventId) {
           setTimeout(() => {
+            const container = appointmentsContainerRef.current;
             console.log('[SCROLL] Running scroll timeout:', {
-              containerExists: !!appointmentsContainerRef.current
+              containerExists: !!container
             });
-            if (appointmentsContainerRef.current) {
-              const currentCard = appointmentsContainerRef.current.querySelector(`.event-card[data-event-id="${targetEventId}"]`);
-              console.log('[SCROLL] Card found:', !!currentCard);
-              if (currentCard) {
-                currentCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (container) {
+              const card = container.querySelector(`.event-card[data-event-id="${targetEventId}"]`);
+              console.log('[SCROLL] Card found:', !!card);
+              if (card) {
+                const containerTop = container.getBoundingClientRect().top;
+                const cardTop = card.getBoundingClientRect().top;
+                const relativeTop = cardTop - containerTop + container.scrollTop;
+                console.log('[SCROLL] Scrolling to:', relativeTop);
+                container.scrollTo({ top: relativeTop, behavior: 'smooth' });
                 scrolledOnceRef.current = true;
               }
             }

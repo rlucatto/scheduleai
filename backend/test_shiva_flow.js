@@ -19,6 +19,9 @@ try {
   // Dynamic import so it loads with modified tokens.json existence
   const { chatWithAssistant } = await import('./services/gemini.js');
 
+  // Wait for async loadPreferences to complete
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
   console.log('\n--- Running Shiva Flow Tests ---');
 
   // Test Case 1: "preciso ir no shiva amanhã" (No hour provided)
@@ -35,6 +38,9 @@ try {
   console.log('\nVerification case 1:');
   console.log('- Called search_contacts:', calledSearchContacts ? 'PASS' : 'FAIL');
   console.log('- Did NOT call create_calendar_event yet:', !calledCreateEvent ? 'PASS' : 'FAIL');
+
+  // Delay to prevent rate limit
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   // Test Case 2: Provide the hour, check for proximity warning.
   // Tomorrow's date:
@@ -62,6 +68,9 @@ try {
   console.log('\nVerification case 2:');
   console.log('- Called list_calendar_events:', calledListEvents ? 'PASS' : 'FAIL');
   console.log('- Warning about proximity/conflict present in response:', hasConflictWarning ? 'PASS' : 'FAIL');
+
+  // Delay to prevent rate limit
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   // Test Case 3: "preciso ir no shiva amanhã" but with scenario shiva_no_address.
   // It should fall back to internet search / search grounding.
