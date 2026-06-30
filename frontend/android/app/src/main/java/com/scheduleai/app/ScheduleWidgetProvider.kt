@@ -79,7 +79,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
                 views.setTextViewText(R.id.txt_status, "Atualizado às " + sdf.format(Date()))
                 appWidgetManager.updateAppWidget(appWidgetId, views)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
                 views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap(e.message ?: "Erro desconhecido"))
                 views.setTextViewText(R.id.txt_status, "Erro de atualização")
