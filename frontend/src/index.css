@@ -388,6 +388,7 @@ h1, h2, h3, h4 {
   gap: 10px;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .event-card::before {
