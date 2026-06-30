@@ -83,20 +83,28 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             public void run() {
                 try {
                     String data = fetchWidgetData(context);
-                    if (data != null) {
+                    if (data != null && !data.contains("\"error\":")) {
                         // Render timeline graphic
                         Bitmap bitmap = drawTimelineBitmap(data);
                         views.setImageViewBitmap(R.id.img_timeline, bitmap);
                         
                         // Populate native event list and interactivity
                         populateWidgetUI(context, appWidgetManager, appWidgetId, views, data);
+                        
+                        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
+                        views.setTextViewText(R.id.txt_status, "Atualizado às " + sdf.format(new Date()));
                     } else {
-                        views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap("Falha ao carregar dados"));
+                        String errMsg = "Falha ao carregar dados";
+                        if (data != null) {
+                            try {
+                                JSONObject errJson = new JSONObject(data);
+                                errMsg = errJson.optString("error", errMsg);
+                            } catch (Exception ignored) {}
+                        }
+                        views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap(errMsg));
                         hideAllEventRows(views);
+                        views.setTextViewText(R.id.txt_status, errMsg);
                     }
-
-                    SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
-                    views.setTextViewText(R.id.txt_status, "Atualizado às " + sdf.format(new Date()));
                     appWidgetManager.updateAppWidget(appWidgetId, views);
                 } catch (Throwable e) {
                     e.printStackTrace();
@@ -339,16 +347,20 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
     private String fetchWidgetData(Context context) {
         SharedPreferences prefs = context.getSharedPreferences("WidgetPrefs", Context.MODE_PRIVATE);
         String backendUrl = prefs.getString("backend_url", BACKEND_URL);
+        android.util.Log.d("ScheduleWidget", "fetchWidgetData starting. backendUrl=" + backendUrl);
 
         HttpURLConnection conn = null;
         try {
             URL url = new URL(backendUrl + "/api/widget/data");
+            android.util.Log.d("ScheduleWidget", "Connecting to: " + url.toString());
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
 
-            if (conn.getResponseCode() == 200) {
+            int responseCode = conn.getResponseCode();
+            android.util.Log.d("ScheduleWidget", "HTTP Response Code: " + responseCode);
+            if (responseCode == 200) {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                 StringBuilder response = new StringBuilder();
                 String line;
@@ -356,13 +368,15 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                     response.append(line);
                 }
                 reader.close();
+                android.util.Log.d("ScheduleWidget", "Fetch succeeded. Response length=" + response.length());
                 return response.toString();
             } else {
-                return null;
+                android.util.Log.e("ScheduleWidget", "HTTP error code: " + responseCode);
+                return "{\"error\": \"HTTP " + responseCode + "\"}";
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            return null;
+            android.util.Log.e("ScheduleWidget", "Exception in fetchWidgetData", e);
+            return "{\"error\": \"" + e.getClass().getSimpleName() + ": " + e.getMessage() + "\"}";
         } finally {
             if (conn != null) {
                 conn.disconnect();
