@@ -13,9 +13,13 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.net.Uri;
 import android.os.Build;
-import android.widget.RemoteViews;
+import android.os.Bundle;
 import android.util.Pair;
+import android.util.TypedValue;
+import android.view.View;
+import android.widget.RemoteViews;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -24,6 +28,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -67,11 +72,6 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
         PendingIntent refreshPendingIntent = PendingIntent.getBroadcast(context, 0, refreshIntent, flags);
         views.setOnClickPendingIntent(R.id.btn_refresh, refreshPendingIntent);
 
-        // Configure click on widget to open URL
-        Intent openIntent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(BACKEND_URL));
-        PendingIntent openPendingIntent = PendingIntent.getActivity(context, 1, openIntent, flags);
-        views.setOnClickPendingIntent(R.id.img_timeline, openPendingIntent);
-
         views.setTextViewText(R.id.txt_status, "Atualizando cronograma...");
         appWidgetManager.updateAppWidget(appWidgetId, views);
 
@@ -82,20 +82,25 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             public void run() {
                 try {
                     String data = fetchWidgetData();
-                    Bitmap bitmap;
                     if (data != null) {
-                        bitmap = drawTimelineBitmap(data);
+                        // Render timeline graphic
+                        Bitmap bitmap = drawTimelineBitmap(data);
+                        views.setImageViewBitmap(R.id.img_timeline, bitmap);
+                        
+                        // Populate native event list and interactivity
+                        populateWidgetUI(context, appWidgetManager, appWidgetId, views, data);
                     } else {
-                        bitmap = drawErrorBitmap("Falha ao carregar dados");
+                        views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap("Falha ao carregar dados"));
+                        hideAllEventRows(views);
                     }
 
-                    views.setImageViewBitmap(R.id.img_timeline, bitmap);
                     SimpleDateFormat sdf = new SimpleDateFormat("HH:mm", Locale.getDefault());
                     views.setTextViewText(R.id.txt_status, "Atualizado às " + sdf.format(new Date()));
                     appWidgetManager.updateAppWidget(appWidgetId, views);
                 } catch (Throwable e) {
                     e.printStackTrace();
                     views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap(e.getMessage() != null ? e.getMessage() : "Erro desconhecido"));
+                    hideAllEventRows(views);
                     views.setTextViewText(R.id.txt_status, "Erro de atualização");
                     appWidgetManager.updateAppWidget(appWidgetId, views);
                 } finally {
@@ -109,6 +114,216 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                 }
             }
         }).start();
+    }
+
+    private void hideAllEventRows(RemoteViews views) {
+        views.setViewVisibility(R.id.row_event_1, View.GONE);
+        views.setViewVisibility(R.id.row_event_2, View.GONE);
+        views.setViewVisibility(R.id.row_event_3, View.GONE);
+    }
+
+    private void populateWidgetUI(Context context, AppWidgetManager appWidgetManager, int appWidgetId, RemoteViews views, String jsonStr) {
+        try {
+            JSONObject json = new JSONObject(jsonStr);
+            JSONArray eventsArray = json.optJSONArray("events");
+            if (eventsArray == null) eventsArray = new JSONArray();
+
+            if (eventsArray.length() == 0) {
+                hideAllEventRows(views);
+                return;
+            }
+
+            String minTimeStr = json.getString("minTime");
+            String maxTimeStr = json.getString("maxTime");
+
+            final SimpleDateFormat sdfParserWithMs = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+            sdfParserWithMs.setTimeZone(TimeZone.getTimeZone("UTC"));
+            final SimpleDateFormat sdfParserWithoutMs = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
+            sdfParserWithoutMs.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+            class DateParser {
+                long parse(String isoStr) {
+                    try {
+                        return sdfParserWithMs.parse(isoStr).getTime();
+                    } catch (Exception e) {
+                        try {
+                            return sdfParserWithoutMs.parse(isoStr).getTime();
+                        } catch (Exception e2) {
+                            return 0L;
+                        }
+                    }
+                }
+            }
+            final DateParser dateParser = new DateParser();
+
+            final long minTime = dateParser.parse(minTimeStr);
+            final long maxTime = dateParser.parse(maxTimeStr);
+            final long totalDuration = maxTime - minTime;
+
+            class EventItem {
+                String id;
+                String summary;
+                String location;
+                String htmlLink;
+                String colorHex;
+                long startMs;
+                long endMs;
+                long departureMs;
+                long readyMs;
+            }
+
+            ArrayList<EventItem> parsedEvents = new ArrayList<>();
+            for (int i = 0; i < eventsArray.length(); i++) {
+                JSONObject event = eventsArray.getJSONObject(i);
+                EventItem item = new EventItem();
+                item.id = event.optString("id", "");
+                item.summary = event.getString("summary");
+                item.location = event.optString("location", "");
+                item.htmlLink = event.optString("htmlLink", "");
+                item.colorHex = event.getString("color");
+                item.readyMs = dateParser.parse(event.getString("getReadyTime"));
+                item.departureMs = dateParser.parse(event.getString("departureTime"));
+                item.startMs = dateParser.parse(event.getString("eventStartTime"));
+                item.endMs = dateParser.parse(event.getString("eventEndTime"));
+                parsedEvents.add(item);
+            }
+
+            // Sort events chronologically
+            Collections.sort(parsedEvents, new Comparator<EventItem>() {
+                @Override
+                public int compare(EventItem o1, EventItem o2) {
+                    return Long.compare(o1.startMs, o2.startMs);
+                }
+            });
+
+            // Set up transparent overlay areas on the timeline chart for the next upcoming event (item 0)
+            if (parsedEvents.size() > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && totalDuration > 0) {
+                EventItem firstItem = parsedEvents.get(0);
+                
+                Bundle widgetOptions = appWidgetManager.getAppWidgetOptions(appWidgetId);
+                int widgetWidthDp = widgetOptions.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 260);
+
+                float readyPct = ((float) (firstItem.readyMs - minTime) / totalDuration) * 100f;
+                float departPct = ((float) (firstItem.departureMs - minTime) / totalDuration) * 100f;
+                float startPct = ((float) (firstItem.startMs - minTime) / totalDuration) * 100f;
+                float endPct = ((float) (firstItem.endMs - minTime) / totalDuration) * 100f;
+
+                float widthBefore = (readyPct / 100f) * widgetWidthDp;
+                float widthPrep = ((departPct - readyPct) / 100f) * widgetWidthDp;
+                float widthTravel = ((startPct - departPct) / 100f) * widgetWidthDp;
+                float widthEvent = ((endPct - startPct) / 100f) * widgetWidthDp;
+                float widthAfter = ((100f - endPct) / 100f) * widgetWidthDp;
+
+                views.setViewLayoutWidth(R.id.click_before, Math.max(0, widthBefore), TypedValue.COMPLEX_UNIT_DIP);
+                views.setViewLayoutWidth(R.id.click_prep, Math.max(0, widthPrep), TypedValue.COMPLEX_UNIT_DIP);
+                views.setViewLayoutWidth(R.id.click_travel, Math.max(0, widthTravel), TypedValue.COMPLEX_UNIT_DIP);
+                views.setViewLayoutWidth(R.id.click_event, Math.max(0, widthEvent), TypedValue.COMPLEX_UNIT_DIP);
+                views.setViewLayoutWidth(R.id.click_after, Math.max(0, widthAfter), TypedValue.COMPLEX_UNIT_DIP);
+
+                int piFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
+
+                // 1. click_before / click_after / click_prep -> Open App
+                Intent appLaunchIntent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+                PendingIntent appPI = PendingIntent.getActivity(context, 10, appLaunchIntent, piFlags);
+                views.setOnClickPendingIntent(R.id.click_before, appPI);
+                views.setOnClickPendingIntent(R.id.click_prep, appPI);
+                views.setOnClickPendingIntent(R.id.click_after, appPI);
+
+                // 2. click_travel -> Open Google Maps with event location
+                if (firstItem.location != null && !firstItem.location.isEmpty()) {
+                    String geoUri = "https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(firstItem.location, "UTF-8");
+                    Intent mapsIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(geoUri));
+                    PendingIntent mapsPI = PendingIntent.getActivity(context, 11, mapsIntent, piFlags);
+                    views.setOnClickPendingIntent(R.id.click_travel, mapsPI);
+                } else {
+                    views.setOnClickPendingIntent(R.id.click_travel, appPI);
+                }
+
+                // 3. click_event -> Open Event Link (Google Calendar event details)
+                if (firstItem.htmlLink != null && !firstItem.htmlLink.isEmpty()) {
+                    Intent calendarIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(firstItem.htmlLink));
+                    PendingIntent calPI = PendingIntent.getActivity(context, 12, calendarIntent, piFlags);
+                    views.setOnClickPendingIntent(R.id.click_event, calPI);
+                } else {
+                    views.setOnClickPendingIntent(R.id.click_event, appPI);
+                }
+            }
+
+            // Populate the three list rows
+            SimpleDateFormat sdfTime = new SimpleDateFormat("HH:mm", Locale.getDefault());
+            sdfTime.setTimeZone(TimeZone.getDefault());
+
+            int[] rowIds = { R.id.row_event_1, R.id.row_event_2, R.id.row_event_3 };
+            int[] dotIds = { R.id.dot_event_1, R.id.dot_event_2, R.id.dot_event_3 };
+            int[] timeIds = { R.id.time_event_1, R.id.time_event_2, R.id.time_event_3 };
+            int[] titleIds = { R.id.title_event_1, R.id.title_event_2, R.id.title_event_3 };
+            int[] subIds = { R.id.sub_event_1, R.id.sub_event_2, R.id.sub_event_3 };
+
+            int maxItems = Math.min(parsedEvents.size(), 3);
+            for (int i = 0; i < 3; i++) {
+                if (i < maxItems) {
+                    EventItem item = parsedEvents.get(i);
+                    views.setViewVisibility(rowIds[i], View.VISIBLE);
+                    
+                    // Set color filter on the dot
+                    int colorVal = Color.parseColor(item.colorHex);
+                    views.setInt(dotIds[i], "setColorFilter", colorVal);
+
+                    // Set time range
+                    String startStr = sdfTime.format(new Date(item.startMs));
+                    String endStr = sdfTime.format(new Date(item.endMs));
+                    views.setTextViewText(timeIds[i], startStr + " - " + endStr);
+
+                    // Set title
+                    views.setTextViewText(titleIds[i], item.summary);
+
+                    // Set sub info text
+                    long prepMin = (item.departureMs - item.readyMs) / (60 * 1000);
+                    long travelMin = (item.startMs - item.departureMs) / (60 * 1000);
+                    StringBuilder subText = new StringBuilder();
+                    if (prepMin > 0) {
+                        subText.append("🚿 Se arrumar: ").append(prepMin).append("m");
+                    }
+                    if (travelMin > 0) {
+                        if (subText.length() > 0) subText.append("  •  ");
+                        subText.append("🚗 Deslocamento: ").append(travelMin).append("m");
+                    }
+
+                    int piFlags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
+                    
+                    // Click on Row / Title -> Open Event or App
+                    Intent mainLaunchIntent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+                    PendingIntent rowPI = PendingIntent.getActivity(context, 100 + i, mainLaunchIntent, piFlags);
+                    if (item.htmlLink != null && !item.htmlLink.isEmpty()) {
+                        Intent calendarIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(item.htmlLink));
+                        rowPI = PendingIntent.getActivity(context, 100 + i, calendarIntent, piFlags);
+                    }
+                    views.setOnClickPendingIntent(rowIds[i], rowPI);
+
+                    if (subText.length() > 0) {
+                        views.setViewVisibility(subIds[i], View.VISIBLE);
+                        views.setTextViewText(subIds[i], subText.toString());
+
+                        // Click on Subtitle/Deslocamento -> Open Google Maps
+                        if (item.location != null && !item.location.isEmpty()) {
+                            String mapUrl = "https://www.google.com/maps/search/?api=1&query=" + URLEncoder.encode(item.location, "UTF-8");
+                            Intent mapsIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(mapUrl));
+                            PendingIntent mapsPI = PendingIntent.getActivity(context, 200 + i, mapsIntent, piFlags);
+                            views.setOnClickPendingIntent(subIds[i], mapsPI);
+                        } else {
+                            views.setOnClickPendingIntent(subIds[i], rowPI);
+                        }
+                    } else {
+                        views.setViewVisibility(subIds[i], View.GONE);
+                    }
+                } else {
+                    views.setViewVisibility(rowIds[i], View.GONE);
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private String fetchWidgetData() {
@@ -144,7 +359,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
 
     private Bitmap drawTimelineBitmap(String jsonStr) {
         int width = 500;
-        int height = 260;
+        int height = 85;
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.TRANSPARENT);
@@ -214,7 +429,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             float barBottom = 50f;
 
             Paint paintTrack = new Paint();
-            paintTrack.setColor(Color.parseColor("#12FFFFFF")); // ~7% white opacity
+            paintTrack.setColor(Color.parseColor("#12FFFFFF")); 
             paintTrack.setAntiAlias(true);
             RectF trackRect = new RectF(0f, barTop, width, barBottom);
             canvas.drawRoundRect(trackRect, 6f, 6f, paintTrack);
@@ -298,6 +513,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             if (nowTime >= minTime && nowTime <= maxTime) {
                 float nowPct = ((float) (nowTime - minTime) / (float) totalDuration) * 100f;
                 float nowX = (nowPct / 100f) * width;
+
                 Paint paintNowLine = new Paint();
                 paintNowLine.setColor(Color.parseColor("#06B6D4"));
                 paintNowLine.setStrokeWidth(2f);
@@ -357,69 +573,6 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                 canvas.drawText(label, finalX, barBottom + 25f, paintTick);
             }
 
-            Paint paintSeparator = new Paint();
-            paintSeparator.setColor(Color.parseColor("#1AFFFFFF"));
-            paintSeparator.setStrokeWidth(1.5f);
-            canvas.drawLine(15f, 95f, width - 15f, 95f, paintSeparator);
-
-            Paint paintTimeBold = new Paint();
-            paintTimeBold.setColor(Color.WHITE);
-            paintTimeBold.setTextSize(13f);
-            paintTimeBold.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-            paintTimeBold.setAntiAlias(true);
-            paintTimeBold.setTextAlign(Paint.Align.LEFT);
-
-            Paint paintSummary = new Paint();
-            paintSummary.setColor(Color.WHITE);
-            paintSummary.setTextSize(13f);
-            paintSummary.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
-            paintSummary.setAntiAlias(true);
-            paintSummary.setTextAlign(Paint.Align.LEFT);
-
-            Paint paintSub = new Paint();
-            paintSub.setColor(Color.parseColor("#888888"));
-            paintSub.setTextSize(10f);
-            paintSub.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
-            paintSub.setAntiAlias(true);
-            paintSub.setTextAlign(Paint.Align.LEFT);
-
-            int maxItems = Math.min(parsedEvents.size(), 3);
-            for (int i = 0; i < maxItems; i++) {
-                EventItem item = parsedEvents.get(i);
-                float yStart = 122f + i * 46f;
-                Paint paintColor = new Paint();
-                paintColor.setColor(Color.parseColor(item.colorHex));
-                paintColor.setAntiAlias(true);
-                canvas.drawCircle(25f, yStart, 5f, paintColor);
-
-                String startStr = sdfTime.format(new Date(item.startMs));
-                String endStr = sdfTime.format(new Date(item.endMs));
-                String timeRange = startStr + " - " + endStr;
-
-                canvas.drawText(timeRange, 42f, yStart + 4f, paintTimeBold);
-
-                float timeWidth = paintTimeBold.measureText(timeRange);
-                float summaryX = 42f + timeWidth + 15f;
-                float maxSummaryWidth = width - summaryX - 15f;
-                drawTextLeftAligned(canvas, item.summary, summaryX, yStart + 4f, maxSummaryWidth, paintSummary);
-
-                long prepMin = (item.departureMs - item.readyMs) / (60 * 1000);
-                long travelMin = (item.startMs - item.departureMs) / (60 * 1000);
-
-                StringBuilder subText = new StringBuilder();
-                if (prepMin > 0) {
-                    subText.append("🚿 Se arrumar: ").append(prepMin).append("m");
-                }
-                if (travelMin > 0) {
-                    if (subText.length() > 0) subText.append("  •  ");
-                    subText.append("🚗 Deslocamento: ").append(travelMin).append("m");
-                }
-
-                if (subText.length() > 0) {
-                    canvas.drawText(subText.toString(), 42f, yStart + 18f, paintSub);
-                }
-            }
-
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -448,22 +601,9 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
         canvas.drawText(drawText, rect.centerX(), y, paint);
     }
 
-    private void drawTextLeftAligned(Canvas canvas, String text, float x, float y, float maxWidth, Paint paint) {
-        String drawText = text;
-        float textWidth = paint.measureText(drawText);
-        if (textWidth > maxWidth) {
-            int len = drawText.length();
-            while (len > 1 && paint.measureText(drawText.substring(0, len) + "...") > maxWidth) {
-                len--;
-            }
-            drawText = len > 1 ? drawText.substring(0, len) + "..." : "...";
-        }
-        canvas.drawText(drawText, x, y, paint);
-    }
-
     private Bitmap drawPlaceholderBitmap(String message) {
         int width = 500;
-        int height = 260;
+        int height = 85;
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.TRANSPARENT);
@@ -481,7 +621,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
 
     private Bitmap drawErrorBitmap(String error) {
         int width = 500;
-        int height = 260;
+        int height = 85;
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.TRANSPARENT);

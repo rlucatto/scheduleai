@@ -626,6 +626,9 @@ app.get('/api/widget/data', async (req, res) => {
       
       const calc = await calculateEventTriggers(event, currentOrigin, null, prepTimeOverride);
       if (calc) {
+        calc.location = event.location || '';
+        calc.htmlLink = event.htmlLink || '';
+        calc.eventId = event.id || '';
         calculations.push(calc);
         lastEventLocation = event.location || origin;
         lastEventEndTime = new Date(event.end?.dateTime || event.end?.date || event.start?.dateTime || event.start?.date);
@@ -647,7 +650,10 @@ app.get('/api/widget/data', async (req, res) => {
       const getReady = hidePrep ? departure : (calc.getReadyTime ? new Date(calc.getReadyTime) : evStart);
 
       return {
+        id: calc.eventId,
         summary: calc.summary,
+        location: calc.location,
+        htmlLink: calc.htmlLink,
         getReadyTime: getReady.toISOString(),
         departureTime: departure.toISOString(),
         eventStartTime: evStart.toISOString(),

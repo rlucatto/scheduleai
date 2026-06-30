@@ -12,14 +12,14 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="6dp">
 
         <TextView
             android:id="@+id/widget_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Cronograma Diário"
+            android:text="⏰ Cronograma"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold" />
@@ -33,16 +33,241 @@
             android:contentDescription="Atualizar" />
     </LinearLayout>
 
-    <!-- Timeline Chart Image View -->
-    <ImageView
-        android:id="@+id/img_timeline"
+    <!-- Timeline Chart Container with Click Overlays -->
+    <FrameLayout
+        android:id="@+id/timeline_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/header_layout"
+        android:layout_below="@id/header_layout">
+
+        <ImageView
+            android:id="@+id/img_timeline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:contentDescription="Linha do Tempo Visual" />
+
+        <LinearLayout
+            android:id="@+id/click_overlays"
+            android:layout_width="match_parent"
+            android:layout_height="35dp"
+            android:layout_marginTop="3dp"
+            android:orientation="horizontal">
+
+            <View
+                android:id="@+id/click_before"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="#00FFFFFF"
+                android:clickable="true" />
+
+            <View
+                android:id="@+id/click_prep"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="#00FFFFFF"
+                android:clickable="true" />
+
+            <View
+                android:id="@+id/click_travel"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="#00FFFFFF"
+                android:clickable="true" />
+
+            <View
+                android:id="@+id/click_event"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="#00FFFFFF"
+                android:clickable="true" />
+
+            <View
+                android:id="@+id/click_after"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:background="#00FFFFFF"
+                android:clickable="true" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Native Events List -->
+    <LinearLayout
+        android:id="@+id/events_list_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/timeline_container"
         android:layout_above="@id/txt_status"
-        android:adjustViewBounds="true"
-        android:scaleType="fitCenter"
-        android:contentDescription="Linha do Tempo Visual" />
+        android:orientation="vertical"
+        android:layout_marginTop="6dp"
+        android:layout_marginBottom="2dp">
+
+        <!-- Row 1 -->
+        <RelativeLayout
+            android:id="@+id/row_event_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="3dp"
+            android:visibility="gone"
+            android:clickable="true"
+            android:background="?android:attr/selectableItemBackground">
+            
+            <ImageView
+                android:id="@+id/dot_event_1"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_alignParentLeft="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/widget_dot"
+                android:contentDescription="Cor do evento" />
+
+            <TextView
+                android:id="@+id/time_event_1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@id/dot_event_1"
+                android:layout_marginLeft="8dp"
+                android:layout_centerVertical="true"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/title_event_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@id/time_event_1"
+                android:layout_marginLeft="10dp"
+                android:layout_centerVertical="true"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/sub_event_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/title_event_1"
+                android:layout_alignLeft="@id/time_event_1"
+                android:layout_marginTop="1dp"
+                android:textColor="#AAAAAA"
+                android:textSize="10sp"
+                android:clickable="true"
+                android:background="?android:attr/selectableItemBackground" />
+        </RelativeLayout>
+
+        <!-- Row 2 -->
+        <RelativeLayout
+            android:id="@+id/row_event_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="3dp"
+            android:visibility="gone"
+            android:clickable="true"
+            android:background="?android:attr/selectableItemBackground">
+            
+            <ImageView
+                android:id="@+id/dot_event_2"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_alignParentLeft="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/widget_dot"
+                android:contentDescription="Cor do evento" />
+
+            <TextView
+                android:id="@+id/time_event_2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@id/dot_event_2"
+                android:layout_marginLeft="8dp"
+                android:layout_centerVertical="true"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/title_event_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@id/time_event_2"
+                android:layout_marginLeft="10dp"
+                android:layout_centerVertical="true"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/sub_event_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/title_event_2"
+                android:layout_alignLeft="@id/time_event_2"
+                android:layout_marginTop="1dp"
+                android:textColor="#AAAAAA"
+                android:textSize="10sp"
+                android:clickable="true"
+                android:background="?android:attr/selectableItemBackground" />
+        </RelativeLayout>
+
+        <!-- Row 3 -->
+        <RelativeLayout
+            android:id="@+id/row_event_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingVertical="3dp"
+            android:visibility="gone"
+            android:clickable="true"
+            android:background="?android:attr/selectableItemBackground">
+            
+            <ImageView
+                android:id="@+id/dot_event_3"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:layout_alignParentLeft="true"
+                android:layout_centerVertical="true"
+                android:src="@drawable/widget_dot"
+                android:contentDescription="Cor do evento" />
+
+            <TextView
+                android:id="@+id/time_event_3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@id/dot_event_3"
+                android:layout_marginLeft="8dp"
+                android:layout_centerVertical="true"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/title_event_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_toRightOf="@id/time_event_3"
+                android:layout_marginLeft="10dp"
+                android:layout_centerVertical="true"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/sub_event_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_below="@id/title_event_3"
+                android:layout_alignLeft="@id/time_event_3"
+                android:layout_marginTop="1dp"
+                android:textColor="#AAAAAA"
+                android:textSize="10sp"
+                android:clickable="true"
+                android:background="?android:attr/selectableItemBackground" />
+        </RelativeLayout>
+    </LinearLayout>
 
     <!-- Status / Next Event Text -->
     <TextView
@@ -54,6 +279,6 @@
         android:textColor="#AAAAAA"
         android:textSize="10sp"
         android:gravity="center"
-        android:layout_marginTop="6dp" />
+        android:layout_marginTop="4dp" />
 
 </RelativeLayout>
