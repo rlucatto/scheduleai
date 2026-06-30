@@ -83,7 +83,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             public void run() {
                 try {
                     String data = fetchWidgetData(context);
-                    if (data != null && !data.contains("\"error\":")) {
+                    if (data != null && !data.startsWith("ERROR: ")) {
                         // Render timeline graphic
                         Bitmap bitmap = drawTimelineBitmap(data);
                         views.setImageViewBitmap(R.id.img_timeline, bitmap);
@@ -95,11 +95,8 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                         views.setTextViewText(R.id.txt_status, "v1.2 - Atualizado às " + sdf.format(new Date()));
                     } else {
                         String errMsg = "Falha ao carregar dados";
-                        if (data != null) {
-                            try {
-                                JSONObject errJson = new JSONObject(data);
-                                errMsg = errJson.optString("error", errMsg);
-                            } catch (Exception ignored) {}
+                        if (data != null && data.startsWith("ERROR: ")) {
+                            errMsg = data.substring(7);
                         }
                         views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap(errMsg));
                         hideAllEventRows(views);
@@ -363,11 +360,11 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                 return response.toString();
             } else {
                 android.util.Log.e("ScheduleWidget", "HTTP error code: " + responseCode);
-                return "{\"error\": \"HTTP " + responseCode + "\"}";
+                return "ERROR: HTTP " + responseCode;
             }
         } catch (Exception e) {
             android.util.Log.e("ScheduleWidget", "Exception in fetchWidgetData", e);
-            return "{\"error\": \"" + e.getClass().getSimpleName() + ": " + e.getMessage() + "\"}";
+            return "ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage();
         } finally {
             if (conn != null) {
                 conn.disconnect();
