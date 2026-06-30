@@ -20,7 +20,7 @@ import {
   oauth2Client,
   saveTokens
 } from './services/calendar.js';
-import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, synthesizeSpeech } from './services/gemini.js';
+import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, getLastKeyUsed, synthesizeSpeech } from './services/gemini.js';
 import { 
   startScheduler, 
   stopScheduler, 
@@ -85,6 +85,7 @@ app.get('/api/auth/status', (req, res) => {
     status: getAuthStatus(),
     preferences: getPreferences(),
     lastModelUsed: getLastModelUsed(),
+    lastKeyUsed: getLastKeyUsed(),
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
   });
 });
@@ -662,7 +663,10 @@ app.post('/api/assistant/chat', async (req, res) => {
     return res.status(400).json({ error: 'Message is required' });
   }
   const response = await chatWithAssistant(message, history);
-  res.json(response);
+  res.json({
+    ...response,
+    lastKeyUsed: getLastKeyUsed()
+  });
 });
 
 app.get('/api/assistant/proactive-greeting', async (req, res) => {

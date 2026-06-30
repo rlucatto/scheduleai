@@ -117,7 +117,9 @@ const getFriendlyUserName = () => {
   }
 };
 
+let lastKeyUsed = '';
 export const getLastModelUsed = () => lastModelUsed;
+export const getLastKeyUsed = () => lastKeyUsed;
 
 const apiKeys = [
   process.env.GEMINI_API_KEY,
@@ -338,6 +340,7 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
 
       let success = false;
       let resultValue;
+      let activeKey = '';
       const maxRetries = keyPool.length;
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -350,6 +353,7 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
           console.log(`[KEY ROTATOR] Using key: "${active.keyInfo.name}" with model: "${modelName}"`);
           resultValue = await geminiApiCallFn(active.client, modelName);
           success = true;
+          activeKey = active.keyInfo.name;
           break; // Success! Break retry loop
         } catch (error) {
           const errorMsg = error.message || '';
@@ -365,6 +369,7 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
 
       if (success) {
         lastModelUsed = modelName;
+        lastKeyUsed = activeKey;
         return { ...resultValue, modelUsed: modelName };
       } else {
         console.warn(`[FALLBACK] Model "${modelName}" failed on all available keys. Trying next model...`);
@@ -1543,16 +1548,17 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
         }
         console.log("[AI] Raw model response:", JSON.stringify(result.response, null, 2));
         let responseText = '';
+        let toolCalls = result.response.functionCalls() || [];
+        let allExecutedToolCalls = [];
+
         try {
           const firstText = result.response.text();
-          if (firstText) {
+          if (firstText && toolCalls.length === 0) {
             responseText += firstText + '\n\n';
           }
         } catch (e) {
           // ignore if no text
         }
-        let toolCalls = result.response.functionCalls() || [];
-        let allExecutedToolCalls = [];
 
         let turns = 0;
         const maxTurns = 5;
@@ -1694,7 +1700,7 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
           toolCalls = result.response.functionCalls() || [];
           try {
             const nextText = result.response.text();
-            if (nextText) {
+            if (nextText && toolCalls.length === 0) {
               responseText += nextText + '\n\n';
             }
           } catch (e) {

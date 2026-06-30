@@ -302,6 +302,7 @@ function App() {
   const [localModels, setLocalModels] = useState([]);
   const [showCharacteristicsModal, setShowCharacteristicsModal] = useState(false);
   const [currentActiveModel, setCurrentActiveModel] = useState('');
+  const [currentActiveKey, setCurrentActiveKey] = useState('');
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [canDrag, setCanDrag] = useState(false);
@@ -982,6 +983,9 @@ function App() {
 
       if (data.lastModelUsed) {
         setCurrentActiveModel(data.lastModelUsed);
+      }
+      if (data.lastKeyUsed) {
+        setCurrentActiveKey(data.lastKeyUsed);
       }
 
       // Fetch local Ollama models list asynchronously in the background
@@ -1733,6 +1737,9 @@ function App() {
       if (data.modelUsed) {
         setCurrentActiveModel(data.modelUsed);
       }
+      if (data.lastKeyUsed) {
+        setCurrentActiveKey(data.lastKeyUsed);
+      }
       
       if (isVoiceInput) {
         speakText(data.text);
@@ -2095,6 +2102,9 @@ function App() {
       localStorage.setItem('scheduleai_preferences', JSON.stringify(data.preferences));
       if (data.lastModelUsed) {
         setCurrentActiveModel(data.lastModelUsed);
+      }
+      if (data.lastKeyUsed) {
+        setCurrentActiveKey(data.lastKeyUsed);
       }
       fetchTimeline();
     });
@@ -2622,6 +2632,11 @@ function App() {
                   <strong>{preferences.modelPriority?.[0] || 'gemini-2.5-flash'}</strong>
                   <div style={{ fontSize: '11px', marginTop: '3px', color: 'var(--text-secondary)' }}>
                     Modelo em uso: <strong style={{ color: 'var(--success)' }}>{currentActiveModel || preferences.modelPriority?.[0] || 'gemini-2.5-flash'}</strong>
+                    {currentActiveKey && (
+                      <>
+                        {' '}| Chave: <strong style={{ color: 'var(--success)' }}>{currentActiveKey}</strong>
+                      </>
+                    )}
                   </div>
                   <button
                     type="button"
