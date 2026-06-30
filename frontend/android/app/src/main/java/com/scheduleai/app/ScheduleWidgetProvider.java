@@ -212,6 +212,13 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             float barTop = 10f;
             float barBottom = 50f;
 
+            // Draw timeline track/background
+            Paint paintTrack = new Paint();
+            paintTrack.setColor(Color.parseColor("#12FFFFFF")); // ~7% white opacity
+            paintTrack.setAntiAlias(true);
+            RectF trackRect = new RectF(0f, barTop, width, barBottom);
+            canvas.drawRoundRect(trackRect, 6f, 6f, paintTrack);
+
             class TickItem {
                 long time;
                 float pct;
@@ -248,34 +255,58 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
 
                 // 1. Se arrumar (Lilás #a855f7)
                 if (departPct > readyPct) {
-                    float left = (readyPct / 100f) * width;
-                    float right = (departPct / 100f) * width;
-                    paintRect.setColor(Color.parseColor("#a855f7"));
-                    RectF rect = new RectF(left, barTop, right, barBottom);
-                    canvas.drawRoundRect(rect, 6f, 6f, paintRect);
-                    drawTextInside(canvas, "Se arrumar", rect, paintText);
+                    float left = (readyPct / 100f) * width + 1f;
+                    float right = (departPct / 100f) * width - 1f;
+                    if (right > left) {
+                        paintRect.setColor(Color.parseColor("#a855f7"));
+                        RectF rect = new RectF(left, barTop, right, barBottom);
+                        canvas.drawRoundRect(rect, 6f, 6f, paintRect);
+                        drawTextInside(canvas, "Se arrumar", rect, paintText);
+                    }
                 }
 
                 // 2. Deslocamento (Laranja #f59e0b)
                 if (startPct > departPct) {
-                    float left = (departPct / 100f) * width;
-                    float right = (startPct / 100f) * width;
-                    paintRect.setColor(Color.parseColor("#f59e0b"));
-                    RectF rect = new RectF(left, barTop, right, barBottom);
-                    canvas.drawRoundRect(rect, 0f, 0f, paintRect);
-                    drawTextInside(canvas, "Deslocamento", rect, paintText);
+                    float left = (departPct / 100f) * width + 1f;
+                    float right = (startPct / 100f) * width - 1f;
+                    if (right > left) {
+                        paintRect.setColor(Color.parseColor("#f59e0b"));
+                        RectF rect = new RectF(left, barTop, right, barBottom);
+                        canvas.drawRoundRect(rect, 6f, 6f, paintRect);
+                        drawTextInside(canvas, "Deslocamento", rect, paintText);
+                    }
                 }
 
                 // 3. Appointment (Cor do evento)
                 if (endPct > startPct) {
-                    float left = (startPct / 100f) * width;
-                    float right = (endPct / 100f) * width;
-                    paintRect.setColor(Color.parseColor(colorHex));
-                    RectF rect = new RectF(left, barTop, right, barBottom);
-                    float radius = startPct > departPct ? 0f : 6f;
-                    canvas.drawRoundRect(rect, radius, radius, paintRect);
-                    drawTextInside(canvas, summary, rect, paintText);
+                    float left = (startPct / 100f) * width + 1f;
+                    float right = (endPct / 100f) * width - 1f;
+                    if (right > left) {
+                        paintRect.setColor(Color.parseColor(colorHex));
+                        RectF rect = new RectF(left, barTop, right, barBottom);
+                        canvas.drawRoundRect(rect, 6f, 6f, paintRect);
+                        drawTextInside(canvas, summary, rect, paintText);
+                    }
                 }
+            }
+
+            // Draw vertical indicator for "Now" if current time is within range
+            long nowTime = System.currentTimeMillis();
+            if (nowTime >= minTime && nowTime <= maxTime) {
+                float nowPct = ((float) (nowTime - minTime) / (float) totalDuration) * 100f;
+                float nowX = (nowPct / 100f) * width;
+
+                // Draw line
+                Paint paintNowLine = new Paint();
+                paintNowLine.setColor(Color.parseColor("#06B6D4")); // Cyan
+                paintNowLine.setStrokeWidth(2f);
+                canvas.drawLine(nowX, barTop - 4f, nowX, barBottom + 12f, paintNowLine);
+
+                // Draw small dot
+                Paint paintNowDot = new Paint();
+                paintNowDot.setColor(Color.parseColor("#06B6D4"));
+                paintNowDot.setAntiAlias(true);
+                canvas.drawCircle(nowX, barTop - 4f, 3.5f, paintNowDot);
             }
 
             // Draw time ticks
