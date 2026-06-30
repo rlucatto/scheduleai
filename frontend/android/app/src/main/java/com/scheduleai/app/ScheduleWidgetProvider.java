@@ -15,6 +15,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.widget.RemoteViews;
+import android.util.Pair;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -143,7 +144,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
 
     private Bitmap drawTimelineBitmap(String jsonStr) {
         int width = 500;
-        int height = 100;
+        int height = 260;
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.TRANSPARENT);
@@ -212,48 +213,53 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             float barTop = 10f;
             float barBottom = 50f;
 
-            // Draw timeline track/background
             Paint paintTrack = new Paint();
             paintTrack.setColor(Color.parseColor("#12FFFFFF")); // ~7% white opacity
             paintTrack.setAntiAlias(true);
             RectF trackRect = new RectF(0f, barTop, width, barBottom);
             canvas.drawRoundRect(trackRect, 6f, 6f, paintTrack);
 
-            class TickItem {
-                long time;
-                float pct;
-                TickItem(long time, float pct) {
-                    this.time = time;
-                    this.pct = pct;
-                }
+            class EventItem {
+                String summary;
+                String colorHex;
+                long startMs;
+                long endMs;
+                long departureMs;
+                long readyMs;
             }
-            ArrayList<TickItem> ticks = new ArrayList<>();
-
+            ArrayList<EventItem> parsedEvents = new ArrayList<>();
             for (int i = 0; i < eventsArray.length(); i++) {
                 JSONObject event = eventsArray.getJSONObject(i);
-                String getReadyTime = event.getString("getReadyTime");
-                String departureTime = event.getString("departureTime");
-                String eventStartTime = event.getString("eventStartTime");
-                String eventEndTime = event.getString("eventEndTime");
-                String colorHex = event.getString("color");
-                String summary = event.getString("summary");
+                EventItem item = new EventItem();
+                item.summary = event.getString("summary");
+                item.colorHex = event.getString("color");
+                item.readyMs = dateParser.parse(event.getString("getReadyTime"));
+                item.departureMs = dateParser.parse(event.getString("departureTime"));
+                item.startMs = dateParser.parse(event.getString("eventStartTime"));
+                item.endMs = dateParser.parse(event.getString("eventEndTime"));
+                parsedEvents.add(item);
+            }
 
-                float readyPct = pctCalculator.getPct(getReadyTime);
-                float departPct = pctCalculator.getPct(departureTime);
-                float startPct = pctCalculator.getPct(eventStartTime);
-                float endPct = pctCalculator.getPct(eventEndTime);
+            Collections.sort(parsedEvents, new Comparator<EventItem>() {
+                @Override
+                public int compare(EventItem o1, EventItem o2) {
+                    return Long.compare(o1.startMs, o2.startMs);
+                }
+            });
 
-                long grTime = dateParser.parse(getReadyTime);
-                long depTime = dateParser.parse(departureTime);
-                long stTime = dateParser.parse(eventStartTime);
-                long enTime = dateParser.parse(eventEndTime);
+            ArrayList<Pair<Long, Float>> ticks = new ArrayList<>();
 
-                ticks.add(new TickItem(grTime, readyPct));
-                ticks.add(new TickItem(depTime, departPct));
-                ticks.add(new TickItem(stTime, startPct));
-                ticks.add(new TickItem(enTime, endPct));
+            for (EventItem item : parsedEvents) {
+                float readyPct = pctCalculator.getPct(new Date(item.readyMs).toInstant().toString());
+                float departPct = pctCalculator.getPct(new Date(item.departureMs).toInstant().toString());
+                float startPct = pctCalculator.getPct(new Date(item.startMs).toInstant().toString());
+                float endPct = pctCalculator.getPct(new Date(item.endMs).toInstant().toString());
 
-                // 1. Se arrumar (Lilás #a855f7)
+                ticks.add(new Pair<>(item.readyMs, readyPct));
+                ticks.add(new Pair<>(item.departureMs, departPct));
+                ticks.add(new Pair<>(item.startMs, startPct));
+                ticks.add(new Pair<>(item.endMs, endPct));
+
                 if (departPct > readyPct) {
                     float left = (readyPct / 100f) * width + 1f;
                     float right = (departPct / 100f) * width - 1f;
@@ -265,7 +271,6 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                     }
                 }
 
-                // 2. Deslocamento (Laranja #f59e0b)
                 if (startPct > departPct) {
                     float left = (departPct / 100f) * width + 1f;
                     float right = (startPct / 100f) * width - 1f;
@@ -277,51 +282,44 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                     }
                 }
 
-                // 3. Appointment (Cor do evento)
                 if (endPct > startPct) {
                     float left = (startPct / 100f) * width + 1f;
                     float right = (endPct / 100f) * width - 1f;
                     if (right > left) {
-                        paintRect.setColor(Color.parseColor(colorHex));
+                        paintRect.setColor(Color.parseColor(item.colorHex));
                         RectF rect = new RectF(left, barTop, right, barBottom);
                         canvas.drawRoundRect(rect, 6f, 6f, paintRect);
-                        drawTextInside(canvas, summary, rect, paintText);
+                        drawTextInside(canvas, item.summary, rect, paintText);
                     }
                 }
             }
 
-            // Draw vertical indicator for "Now" if current time is within range
             long nowTime = System.currentTimeMillis();
             if (nowTime >= minTime && nowTime <= maxTime) {
                 float nowPct = ((float) (nowTime - minTime) / (float) totalDuration) * 100f;
                 float nowX = (nowPct / 100f) * width;
-
-                // Draw line
                 Paint paintNowLine = new Paint();
-                paintNowLine.setColor(Color.parseColor("#06B6D4")); // Cyan
+                paintNowLine.setColor(Color.parseColor("#06B6D4"));
                 paintNowLine.setStrokeWidth(2f);
                 canvas.drawLine(nowX, barTop - 4f, nowX, barBottom + 12f, paintNowLine);
-
-                // Draw small dot
                 Paint paintNowDot = new Paint();
                 paintNowDot.setColor(Color.parseColor("#06B6D4"));
                 paintNowDot.setAntiAlias(true);
                 canvas.drawCircle(nowX, barTop - 4f, 3.5f, paintNowDot);
             }
 
-            // Draw time ticks
-            Collections.sort(ticks, new Comparator<TickItem>() {
+            Collections.sort(ticks, new Comparator<Pair<Long, Float>>() {
                 @Override
-                public int compare(TickItem o1, TickItem o2) {
-                    return Long.compare(o1.time, o2.time);
+                public int compare(Pair<Long, Float> o1, Pair<Long, Float> o2) {
+                    return Long.compare(o1.first, o2.first);
                 }
             });
 
-            ArrayList<TickItem> uniqueTicks = new ArrayList<>();
-            for (TickItem tick : ticks) {
+            ArrayList<Pair<Long, Float>> uniqueTicks = new ArrayList<>();
+            for (Pair<Long, Float> tick : ticks) {
                 boolean duplicate = false;
-                for (TickItem ut : uniqueTicks) {
-                    if (Math.abs(ut.time - tick.time) < 60 * 1000) {
+                for (Pair<Long, Float> ut : uniqueTicks) {
+                    if (Math.abs(ut.first - tick.first) < 60 * 1000) {
                         duplicate = true;
                         break;
                     }
@@ -335,9 +333,9 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             sdfTime.setTimeZone(TimeZone.getDefault());
 
             for (int idx = 0; idx < uniqueTicks.size(); idx++) {
-                TickItem tick = uniqueTicks.get(idx);
-                float x = (tick.pct / 100f) * width;
-                String label = sdfTime.format(new Date(tick.time));
+                Pair<Long, Float> tick = uniqueTicks.get(idx);
+                float x = (tick.second / 100f) * width;
+                String label = sdfTime.format(new Date(tick.first));
 
                 if (idx == 0) {
                     paintTick.setTextAlign(Paint.Align.LEFT);
@@ -357,6 +355,69 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                 }
 
                 canvas.drawText(label, finalX, barBottom + 25f, paintTick);
+            }
+
+            Paint paintSeparator = new Paint();
+            paintSeparator.setColor(Color.parseColor("#1AFFFFFF"));
+            paintSeparator.setStrokeWidth(1.5f);
+            canvas.drawLine(15f, 95f, width - 15f, 95f, paintSeparator);
+
+            Paint paintTimeBold = new Paint();
+            paintTimeBold.setColor(Color.WHITE);
+            paintTimeBold.setTextSize(13f);
+            paintTimeBold.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+            paintTimeBold.setAntiAlias(true);
+            paintTimeBold.setTextAlign(Paint.Align.LEFT);
+
+            Paint paintSummary = new Paint();
+            paintSummary.setColor(Color.WHITE);
+            paintSummary.setTextSize(13f);
+            paintSummary.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
+            paintSummary.setAntiAlias(true);
+            paintSummary.setTextAlign(Paint.Align.LEFT);
+
+            Paint paintSub = new Paint();
+            paintSub.setColor(Color.parseColor("#888888"));
+            paintSub.setTextSize(10f);
+            paintSub.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
+            paintSub.setAntiAlias(true);
+            paintSub.setTextAlign(Paint.Align.LEFT);
+
+            int maxItems = Math.min(parsedEvents.size(), 3);
+            for (int i = 0; i < maxItems; i++) {
+                EventItem item = parsedEvents.get(i);
+                float yStart = 122f + i * 46f;
+                Paint paintColor = new Paint();
+                paintColor.setColor(Color.parseColor(item.colorHex));
+                paintColor.setAntiAlias(true);
+                canvas.drawCircle(25f, yStart, 5f, paintColor);
+
+                String startStr = sdfTime.format(new Date(item.startMs));
+                String endStr = sdfTime.format(new Date(item.endMs));
+                String timeRange = startStr + " - " + endStr;
+
+                canvas.drawText(timeRange, 42f, yStart + 4f, paintTimeBold);
+
+                float timeWidth = paintTimeBold.measureText(timeRange);
+                float summaryX = 42f + timeWidth + 15f;
+                float maxSummaryWidth = width - summaryX - 15f;
+                drawTextLeftAligned(canvas, item.summary, summaryX, yStart + 4f, maxSummaryWidth, paintSummary);
+
+                long prepMin = (item.departureMs - item.readyMs) / (60 * 1000);
+                long travelMin = (item.startMs - item.departureMs) / (60 * 1000);
+
+                StringBuilder subText = new StringBuilder();
+                if (prepMin > 0) {
+                    subText.append("🚿 Se arrumar: ").append(prepMin).append("m");
+                }
+                if (travelMin > 0) {
+                    if (subText.length() > 0) subText.append("  •  ");
+                    subText.append("🚗 Deslocamento: ").append(travelMin).append("m");
+                }
+
+                if (subText.length() > 0) {
+                    canvas.drawText(subText.toString(), 42f, yStart + 18f, paintSub);
+                }
             }
 
         } catch (Exception e) {
@@ -387,9 +448,22 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
         canvas.drawText(drawText, rect.centerX(), y, paint);
     }
 
+    private void drawTextLeftAligned(Canvas canvas, String text, float x, float y, float maxWidth, Paint paint) {
+        String drawText = text;
+        float textWidth = paint.measureText(drawText);
+        if (textWidth > maxWidth) {
+            int len = drawText.length();
+            while (len > 1 && paint.measureText(drawText.substring(0, len) + "...") > maxWidth) {
+                len--;
+            }
+            drawText = len > 1 ? drawText.substring(0, len) + "..." : "...";
+        }
+        canvas.drawText(drawText, x, y, paint);
+    }
+
     private Bitmap drawPlaceholderBitmap(String message) {
         int width = 500;
-        int height = 100;
+        int height = 260;
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.TRANSPARENT);
@@ -407,7 +481,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
 
     private Bitmap drawErrorBitmap(String error) {
         int width = 500;
-        int height = 100;
+        int height = 260;
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.TRANSPARENT);

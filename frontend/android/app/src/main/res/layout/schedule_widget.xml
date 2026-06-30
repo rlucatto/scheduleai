@@ -37,10 +37,11 @@
     <ImageView
         android:id="@+id/img_timeline"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:layout_below="@id/header_layout"
         android:layout_above="@id/txt_status"
-        android:scaleType="fitXY"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
         android:contentDescription="Linha do Tempo Visual" />
 
     <!-- Status / Next Event Text -->
