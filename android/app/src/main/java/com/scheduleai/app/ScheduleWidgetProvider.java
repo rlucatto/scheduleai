@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -81,7 +82,7 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
             @Override
             public void run() {
                 try {
-                    String data = fetchWidgetData();
+                    String data = fetchWidgetData(context);
                     if (data != null) {
                         // Render timeline graphic
                         Bitmap bitmap = drawTimelineBitmap(data);
@@ -335,10 +336,13 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
         }
     }
 
-    private String fetchWidgetData() {
+    private String fetchWidgetData(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences("WidgetPrefs", Context.MODE_PRIVATE);
+        String backendUrl = prefs.getString("backend_url", BACKEND_URL);
+
         HttpURLConnection conn = null;
         try {
-            URL url = new URL(BACKEND_URL + "/api/widget/data");
+            URL url = new URL(backendUrl + "/api/widget/data");
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("GET");
             conn.setConnectTimeout(8000);

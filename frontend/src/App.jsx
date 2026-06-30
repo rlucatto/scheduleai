@@ -330,6 +330,14 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetSettings) {
+      window.Capacitor.Plugins.WidgetSettings.saveBackendUrl({ url: BACKEND_URL }).catch(err => {
+        console.error('Failed to sync backend URL with widget:', err);
+      });
+    }
+  }, []);
+
   const [selectedLocationDate, setSelectedLocationDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
   });
@@ -1702,6 +1710,13 @@ function App() {
     
     if (newUrl !== oldUrl) {
       localStorage.setItem('backend_url', newUrl);
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetSettings) {
+        try {
+          await window.Capacitor.Plugins.WidgetSettings.saveBackendUrl({ url: newUrl });
+        } catch (err) {
+          console.error('Failed to sync new URL with widget:', err);
+        }
+      }
       window.location.reload();
       return;
     }
