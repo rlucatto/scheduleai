@@ -65,6 +65,8 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         views.setTextViewText(R.id.txt_status, "Atualizando cronograma...")
         appWidgetManager.updateAppWidget(appWidgetId, views)
 
+        val pendingResult = goAsync()
+
         // Efetua busca assíncrona dos dados e desenha no canvas
         thread {
             try {
@@ -84,6 +86,12 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 views.setImageViewBitmap(R.id.img_timeline, drawErrorBitmap(e.message ?: "Erro desconhecido"))
                 views.setTextViewText(R.id.txt_status, "Erro de atualização")
                 appWidgetManager.updateAppWidget(appWidgetId, views)
+            } finally {
+                try {
+                    pendingResult?.finish()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
         }
     }
@@ -118,8 +126,8 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
     }
 
     private fun drawTimelineBitmap(jsonStr: String): Bitmap {
-        val width = 800
-        val height = 160
+        val width = 500
+        val height = 100
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.TRANSPARENT)
@@ -133,16 +141,32 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
 
         val minTimeStr = json.getString("minTime")
         val maxTimeStr = json.getString("maxTime")
-        val sdfParser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+
+        val sdfParserWithMs = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        val sdfParserWithoutMs = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             timeZone = TimeZone.getTimeZone("UTC")
         }
 
-        val minTime = sdfParser.parse(minTimeStr)?.time ?: 0L
-        val maxTime = sdfParser.parse(maxTimeStr)?.time ?: 0L
+        fun parseIsoDate(isoStr: String): Long {
+            return try {
+                sdfParserWithMs.parse(isoStr)?.time ?: 0L
+            } catch (e: Exception) {
+                try {
+                    sdfParserWithoutMs.parse(isoStr)?.time ?: 0L
+                } catch (e2: Exception) {
+                    0L
+                }
+            }
+        }
+
+        val minTime = parseIsoDate(minTimeStr)
+        val maxTime = parseIsoDate(maxTimeStr)
         val totalDuration = maxTime - minTime
 
         fun getPct(isoStr: String): Float {
-            val time = sdfParser.parse(isoStr)?.time ?: 0L
+            val time = parseIsoDate(isoStr)
             if (totalDuration <= 0L) return 0f
             return ((time - minTime).toFloat() / totalDuration.toFloat()) * 100f
         }
@@ -150,7 +174,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
         val paintRect = Paint().apply { isAntiAlias = true }
         val paintText = Paint().apply {
             color = Color.WHITE
-            textSize = 20f
+            textSize = 13f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
@@ -158,14 +182,13 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
 
         val paintTick = Paint().apply {
             color = Color.parseColor("#888888")
-            textSize = 18f
+            textSize = 11f
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
 
-        val barTop = 15f
-        val barBottom = 75f
-        val barHeight = barBottom - barTop
+        val barTop = 10f
+        val barBottom = 50f
 
         // Desenha os blocos do dia
         val ticks = ArrayList<Pair<Long, Float>>()
@@ -185,18 +208,15 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
             val endPct = getPct(eventEndTime)
 
             // Parse date times for ticks
-            val grTime = sdfParser.parse(getReadyTime)!!.time
-            val depTime = sdfParser.parse(departureTime)!!.time
-            val stTime = sdfParser.parse(eventStartTime)!!.time
-            val enTime = sdfParser.parse(eventEndTime)!!.time
+            val grTime = parseIsoDate(getReadyTime)
+            val depTime = parseIsoDate(departureTime)
+            val stTime = parseIsoDate(eventStartTime)
+            val enTime = parseIsoDate(eventEndTime)
 
             ticks.add(Pair(grTime, readyPct))
             ticks.add(Pair(depTime, departPct))
             ticks.add(Pair(stTime, startPct))
             ticks.add(Pair(enTime, endPct))
-
-            val leftBound = 0f
-            val rightBound = width.toFloat()
 
             // 1. Se arrumar (Lilás #a855f7)
             if (departPct > readyPct) {
@@ -204,7 +224,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 val right = (departPct / 100f) * width
                 paintRect.color = Color.parseColor("#a855f7")
                 val rect = RectF(left, barTop, right, barBottom)
-                canvas.drawRoundRect(rect, 8f, 8f, paintRect)
+                canvas.drawRoundRect(rect, 6f, 6f, paintRect)
                 drawTextInside(canvas, "Se arrumar", rect, paintText)
             }
 
@@ -224,7 +244,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 val right = (endPct / 100f) * width
                 paintRect.color = Color.parseColor(colorHex)
                 val rect = RectF(left, barTop, right, barBottom)
-                val radius = if (startPct > departPct) 0f else 8f
+                val radius = if (startPct > departPct) 0f else 6f
                 canvas.drawRoundRect(rect, radius, radius, paintRect)
                 drawTextInside(canvas, summary, rect, paintText)
             }
@@ -262,7 +282,7 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
                 else -> x
             }
 
-            canvas.drawText(label, finalX, barBottom + 35f, paintTick)
+            canvas.drawText(label, finalX, barBottom + 25f, paintTick)
         }
 
         return bitmap
@@ -270,15 +290,15 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
 
     private fun drawTextInside(canvas: Canvas, text: String, rect: RectF, paint: Paint) {
         val rectWidth = rect.width()
-        if (rectWidth < 40f) return // Muito pequeno para ler qualquer coisa
+        if (rectWidth < 30f) return // Muito pequeno para ler qualquer coisa
 
         // Truncate text if needed
         var drawText = text
         val textWidth = paint.measureText(drawText)
-        if (textWidth > rectWidth - 10f) {
+        if (textWidth > rectWidth - 6f) {
             // Encontra tamanho do texto que cabe com reticências
             var len = drawText.length
-            while (len > 1 && paint.measureText(drawText.substring(0, len) + "...") > rectWidth - 10f) {
+            while (len > 1 && paint.measureText(drawText.substring(0, len) + "...") > rectWidth - 6f) {
                 len--
             }
             drawText = if (len > 1) drawText.substring(0, len) + "..." else "..."
@@ -293,15 +313,15 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
     }
 
     private fun drawPlaceholderBitmap(message: String): Bitmap {
-        val width = 800
-        val height = 160
+        val width = 500
+        val height = 100
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.TRANSPARENT)
 
         val paintText = Paint().apply {
             color = Color.parseColor("#888888")
-            textSize = 24f
+            textSize = 15f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
@@ -312,15 +332,15 @@ class ScheduleWidgetProvider : AppWidgetProvider() {
     }
 
     private fun drawErrorBitmap(error: String): Bitmap {
-        val width = 800
-        val height = 160
+        val width = 500
+        val height = 100
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.TRANSPARENT)
 
         val paintText = Paint().apply {
             color = Color.parseColor("#ff4d4d")
-            textSize = 22f
+            textSize = 14f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
