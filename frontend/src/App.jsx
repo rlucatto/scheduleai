@@ -477,17 +477,38 @@ function App() {
   useEffect(() => {
     if (activeTab === 'agenda' && activeSecondTab === 'agenda') {
       if (!scrolledOnceRef.current && calculations.length > 0) {
-        // Find if there is an active or upcoming event
-        const currentEventId = calculations.find(calc => {
+        const now = currentTime.getTime();
+        
+        // 1. Try to find an event currently in progress
+        let targetEvent = calculations.find(calc => {
           const evStart = parseDateSafe(calc.eventStart)?.getTime() || 0;
           const evEnd = (parseDateSafe(calc.eventEnd) || new Date(evStart + 60 * 60 * 1000)).getTime();
-          return currentTime.getTime() <= evEnd;
-        })?.eventId;
+          return now >= evStart && now <= evEnd;
+        });
 
-        if (currentEventId) {
+        // 2. If no event is in progress, find the next upcoming event
+        if (!targetEvent) {
+          const futureEvents = calculations
+            .filter(calc => {
+              const evStart = parseDateSafe(calc.eventStart)?.getTime() || 0;
+              return evStart > now;
+            })
+            .sort((a, b) => {
+              const aStart = parseDateSafe(a.eventStart)?.getTime() || 0;
+              const bStart = parseDateSafe(b.eventStart)?.getTime() || 0;
+              return aStart - bStart;
+            });
+          if (futureEvents.length > 0) {
+            targetEvent = futureEvents[0];
+          }
+        }
+
+        const targetEventId = targetEvent?.eventId;
+
+        if (targetEventId) {
           setTimeout(() => {
             if (appointmentsContainerRef.current) {
-              const currentCard = appointmentsContainerRef.current.querySelector(`.event-card[data-event-id="${currentEventId}"]`);
+              const currentCard = appointmentsContainerRef.current.querySelector(`.event-card[data-event-id="${targetEventId}"]`);
               if (currentCard) {
                 currentCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 scrolledOnceRef.current = true;
