@@ -331,10 +331,23 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetSettings) {
-      window.Capacitor.Plugins.WidgetSettings.saveBackendUrl({ url: BACKEND_URL }).catch(err => {
-        console.error('Failed to sync backend URL with widget:', err);
-      });
+    const syncWithWidget = () => {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetSettings) {
+        window.Capacitor.Plugins.WidgetSettings.saveBackendUrl({ url: BACKEND_URL })
+          .then(() => console.log('[WidgetSync] Successfully synced URL with widget:', BACKEND_URL))
+          .catch(err => console.error('[WidgetSync] Failed to sync URL:', err));
+        return true;
+      }
+      return false;
+    };
+
+    if (!syncWithWidget()) {
+      const t1 = setTimeout(syncWithWidget, 1000);
+      const t2 = setTimeout(syncWithWidget, 3000);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, []);
 
