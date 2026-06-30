@@ -1727,7 +1727,25 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
   }
 };
 
+const healthCache = {};
+
 export const checkSingleModelHealth = async (model) => {
+  const cacheKey = model;
+  const now = Date.now();
+  if (healthCache[cacheKey] && healthCache[cacheKey].expiresAt > now) {
+    console.log(`[HEALTH DIAGNOSTICS] Returning cached health status for ${model}`);
+    return healthCache[cacheKey].data;
+  }
+
+  const result = await _checkSingleModelHealthRaw(model);
+  healthCache[cacheKey] = {
+    expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes cache
+    data: result
+  };
+  return result;
+};
+
+const _checkSingleModelHealthRaw = async (model) => {
   if (model.startsWith('gemini-')) {
     if (keyPool.length === 0) {
       return { status: 'inactive', message: 'Nenhuma chave Gemini configurada no .env' };
