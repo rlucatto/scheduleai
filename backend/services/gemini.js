@@ -118,8 +118,10 @@ const getFriendlyUserName = () => {
 };
 
 let lastKeyUsed = '';
+let lastKeyValueUsed = '';
 export const getLastModelUsed = () => lastModelUsed;
 export const getLastKeyUsed = () => lastKeyUsed;
+export const getLastKeyValueUsed = () => lastKeyValueUsed;
 
 const apiKeys = [
   process.env.GEMINI_API_KEY,
@@ -142,6 +144,10 @@ apiKeys.forEach((key) => {
 });
 
 console.log(`Gemini Key Rotator initialized with ${keyPool.length} active unique keys.`);
+if (keyPool.length > 0) {
+  lastKeyUsed = keyPool[0].name;
+  lastKeyValueUsed = keyPool[0].key;
+}
 
 const getGenAIClient = () => {
   const now = Date.now();
@@ -354,6 +360,7 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
           resultValue = await geminiApiCallFn(active.client, modelName);
           success = true;
           activeKey = active.keyInfo.name;
+          lastKeyValueUsed = active.keyInfo.key;
           break; // Success! Break retry loop
         } catch (error) {
           const errorMsg = error.message || '';
@@ -1729,6 +1736,12 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
     );
   } catch (error) {
     console.error('Error during chatWithAssistant execution:', error);
+    if (keyPool.length > 0) {
+      return {
+        text: `Desculpe, ocorreu um erro temporário de comunicação com a API do Gemini: **${error.message}**.\n\nAs chaves configuradas (como Backup 1) podem estar temporariamente sem quota ou sofrendo rate-limit. Por favor, aguarde alguns instantes ou verifique suas cotas da API.`,
+        toolCalls: []
+      };
+    }
     return await handleMockAIChat(message, history);
   }
 };

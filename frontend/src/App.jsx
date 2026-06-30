@@ -303,6 +303,7 @@ function App() {
   const [showCharacteristicsModal, setShowCharacteristicsModal] = useState(false);
   const [currentActiveModel, setCurrentActiveModel] = useState('');
   const [currentActiveKey, setCurrentActiveKey] = useState('');
+  const [currentActiveKeyString, setCurrentActiveKeyString] = useState('');
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [canDrag, setCanDrag] = useState(false);
@@ -986,6 +987,9 @@ function App() {
       }
       if (data.lastKeyUsed) {
         setCurrentActiveKey(data.lastKeyUsed);
+      }
+      if (data.lastKeyStringUsed !== undefined) {
+        setCurrentActiveKeyString(data.lastKeyStringUsed);
       }
 
       // Fetch local Ollama models list asynchronously in the background
@@ -1740,6 +1744,9 @@ function App() {
       if (data.lastKeyUsed) {
         setCurrentActiveKey(data.lastKeyUsed);
       }
+      if (data.lastKeyStringUsed !== undefined) {
+        setCurrentActiveKeyString(data.lastKeyStringUsed);
+      }
       
       if (isVoiceInput) {
         speakText(data.text);
@@ -2105,6 +2112,9 @@ function App() {
       }
       if (data.lastKeyUsed) {
         setCurrentActiveKey(data.lastKeyUsed);
+      }
+      if (data.lastKeyStringUsed !== undefined) {
+        setCurrentActiveKeyString(data.lastKeyStringUsed);
       }
       fetchTimeline();
     });
@@ -2634,7 +2644,7 @@ function App() {
                     Modelo em uso: <strong style={{ color: 'var(--success)' }}>{currentActiveModel || preferences.modelPriority?.[0] || 'gemini-2.5-flash'}</strong>
                     {currentActiveKey && (
                       <>
-                        {' '}| Chave: <strong style={{ color: 'var(--success)' }}>{currentActiveKey}</strong>
+                        {' '}| Chave: <strong style={{ color: 'var(--success)' }} title={currentActiveKeyString || undefined}>{currentActiveKey}{currentActiveKeyString ? ` (${currentActiveKeyString})` : ''}</strong>
                       </>
                     )}
                   </div>

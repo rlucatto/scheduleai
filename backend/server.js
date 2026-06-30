@@ -20,7 +20,7 @@ import {
   oauth2Client,
   saveTokens
 } from './services/calendar.js';
-import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, getLastKeyUsed, synthesizeSpeech } from './services/gemini.js';
+import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, getLastKeyUsed, getLastKeyValueUsed, synthesizeSpeech } from './services/gemini.js';
 import { 
   startScheduler, 
   stopScheduler, 
@@ -81,11 +81,14 @@ const PORT = process.env.PORT || 5000;
 
 // 1. Auth and Status Routes
 app.get('/api/auth/status', (req, res) => {
+  const lastKeyValue = getLastKeyValueUsed();
+  const maskedKey = lastKeyValue ? `${lastKeyValue.substring(0, 8)}...${lastKeyValue.substring(lastKeyValue.length - 4)}` : '';
   res.json({
     status: getAuthStatus(),
     preferences: getPreferences(),
     lastModelUsed: getLastModelUsed(),
     lastKeyUsed: getLastKeyUsed(),
+    lastKeyStringUsed: maskedKey,
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
   });
 });
@@ -120,8 +123,15 @@ app.get('/api/auth/callback', async (req, res) => {
   }
 
   try {
-    const tokens = await handleAuthCode(code);
-    io.emit('auth_change', { status: getAuthStatus(), preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
+    const lastKeyValue = getLastKeyValueUsed();
+    const maskedKey = lastKeyValue ? `${lastKeyValue.substring(0, 8)}...${lastKeyValue.substring(lastKeyValue.length - 4)}` : '';
+    io.emit('auth_change', { 
+      status: getAuthStatus(), 
+      preferences: getPreferences(), 
+      lastModelUsed: getLastModelUsed(),
+      lastKeyUsed: getLastKeyUsed(),
+      lastKeyStringUsed: maskedKey
+    });
     
     // Decode state
     let origin = '';
@@ -422,8 +432,15 @@ app.post('/api/auth/save-tokens', async (req, res) => {
     return res.status(400).json({ error: 'Missing tokens' });
   }
   try {
-    const status = await saveTokens(tokens);
-    io.emit('auth_change', { status, preferences: getPreferences(), lastModelUsed: getLastModelUsed() });
+    const lastKeyValue = getLastKeyValueUsed();
+    const maskedKey = lastKeyValue ? `${lastKeyValue.substring(0, 8)}...${lastKeyValue.substring(lastKeyValue.length - 4)}` : '';
+    io.emit('auth_change', { 
+      status, 
+      preferences: getPreferences(), 
+      lastModelUsed: getLastModelUsed(),
+      lastKeyUsed: getLastKeyUsed(),
+      lastKeyStringUsed: maskedKey
+    });
     res.json({ success: true, status });
   } catch (err) {
     console.error('[OAUTH] Failed to save tokens manually:', err.message);
@@ -663,9 +680,12 @@ app.post('/api/assistant/chat', async (req, res) => {
     return res.status(400).json({ error: 'Message is required' });
   }
   const response = await chatWithAssistant(message, history);
+  const lastKeyValue = getLastKeyValueUsed();
+  const maskedKey = lastKeyValue ? `${lastKeyValue.substring(0, 8)}...${lastKeyValue.substring(lastKeyValue.length - 4)}` : '';
   res.json({
     ...response,
-    lastKeyUsed: getLastKeyUsed()
+    lastKeyUsed: getLastKeyUsed(),
+    lastKeyStringUsed: maskedKey
   });
 });
 
