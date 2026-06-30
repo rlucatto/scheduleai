@@ -163,13 +163,19 @@ const loadGoogleMapsScript = (apiKey) => {
 };
 
 const getBackendUrl = () => {
-  const saved = localStorage.getItem('backend_url');
-  if (saved) return saved;
-  
   const isCapacitor = window.Capacitor || 
                       (window.location.hostname === 'localhost' && window.location.protocol === 'https:') ||
                       /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-                      
+
+  const saved = localStorage.getItem('backend_url');
+  if (saved) {
+    if (isCapacitor && (saved.includes('localhost') || saved.includes('127.0.0.1'))) {
+      // Ignore invalid local loops inside mobile webview
+    } else {
+      return saved;
+    }
+  }
+  
   if (isCapacitor) {
     return 'https://scheduleai-hz68.onrender.com';
   }
