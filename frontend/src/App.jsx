@@ -475,6 +475,12 @@ function App() {
   }, [activeSecondTab, locationHistory, googleMapsKey]);
 
   useEffect(() => {
+    console.log('[SCROLL] useEffect triggered:', {
+      activeTab,
+      activeSecondTab,
+      scrolledOnce: scrolledOnceRef.current,
+      calcLength: calculations.length
+    });
     if (activeTab === 'agenda' && activeSecondTab === 'agenda') {
       if (!scrolledOnceRef.current && calculations.length > 0) {
         const now = currentTime.getTime();
@@ -504,17 +510,22 @@ function App() {
         }
 
         const targetEventId = targetEvent?.eventId;
+        console.log('[SCROLL] Target event found:', targetEvent?.summary, 'ID:', targetEventId);
 
         if (targetEventId) {
           setTimeout(() => {
+            console.log('[SCROLL] Running scroll timeout:', {
+              containerExists: !!appointmentsContainerRef.current
+            });
             if (appointmentsContainerRef.current) {
               const currentCard = appointmentsContainerRef.current.querySelector(`.event-card[data-event-id="${targetEventId}"]`);
+              console.log('[SCROLL] Card found:', !!currentCard);
               if (currentCard) {
                 currentCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 scrolledOnceRef.current = true;
               }
             }
-          }, 150);
+          }, 250);
         } else {
           scrolledOnceRef.current = true;
         }
