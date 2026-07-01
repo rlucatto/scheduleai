@@ -360,6 +360,22 @@ function App() {
   const [showGPSHelpModal, setShowGPSHelpModal] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
+  const formatAddressText = (text) => {
+    if (!text) return '';
+    let addressPart = text;
+    if (text.startsWith('Estabelecimento: ')) {
+      addressPart = text.replace('Estabelecimento: ', '');
+    }
+    const parts = addressPart.split(',');
+    if (parts.length >= 3) {
+      const street = parts[0].trim();
+      const city = parts[1].trim();
+      const statePart = parts[2].trim().split(' ')[0];
+      return `${street}, ${city}, ${statePart}`;
+    }
+    return text;
+  };
+
   const fetchLocationHistory = async (dateStr) => {
     setIsLoadingLocations(true);
     try {
@@ -531,8 +547,8 @@ function App() {
         const popupContent = `
           <div style="font-family: sans-serif; color: #1e293b; padding: 4px; min-width: 150px; line-height: 1.4;">
             <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${index + 1} - ${loc.time}</strong>
-            <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${loc.address}</span>
-            ${loc.observations ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${loc.observations}</span>` : ''}
+            <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${formatAddressText(loc.address)}</span>
+            ${loc.observations && formatAddressText(loc.observations) !== formatAddressText(loc.address) ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${loc.observations}</span>` : ''}
           </div>
         `;
 
@@ -4347,9 +4363,9 @@ function App() {
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{loc.time} {idx === locationHistory.length - 1 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}</span>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.address}</span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAddressText(loc.address)}</span>
                       </div>
-                      {loc.observations && (
+                      {loc.observations && formatAddressText(loc.observations) !== formatAddressText(loc.address) && (
                         <span style={{ fontSize: '11px', padding: '2px 8px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: '4px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                           {loc.observations}
                         </span>
