@@ -390,7 +390,8 @@ function App() {
       const res = await fetch(`${BACKEND_URL}/api/location/history?date=${dateStr}`);
       if (res.ok) {
         const data = await res.json();
-        setLocationHistory(data);
+        const sorted = data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setLocationHistory(sorted);
       } else {
         console.error('Failed to fetch location history');
       }
@@ -472,7 +473,7 @@ function App() {
 
       let center = { lat: -23.561, lng: -46.655 }; // default SP
       if (locationHistory.length > 0) {
-        const lastRec = locationHistory[locationHistory.length - 1];
+        const lastRec = locationHistory[0];
         center = { lat: lastRec.latitude, lng: lastRec.longitude };
       }
 
@@ -532,7 +533,7 @@ function App() {
       const bounds = new googleMaps.LatLngBounds();
 
       locationHistory.forEach((loc, index) => {
-        const isLatest = index === locationHistory.length - 1;
+        const isLatest = index === 0;
         const color = isLatest ? '#4f46e5' : '#22c55e'; // Indigo or Green
 
         const position = { lat: loc.latitude, lng: loc.longitude };
@@ -541,7 +542,7 @@ function App() {
         const marker = new googleMaps.Marker({
           position: position,
           map: map,
-          title: `Ponto #${index + 1} - ${loc.time}`,
+          title: `Ponto #${locationHistory.length - index} - ${loc.time}`,
           icon: {
             path: googleMaps.SymbolPath.CIRCLE,
             fillColor: color,
@@ -554,7 +555,7 @@ function App() {
 
         const popupContent = `
           <div style="font-family: sans-serif; color: #1e293b; padding: 4px; min-width: 150px; line-height: 1.4;">
-            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${index + 1}${loc.time ? ` - ${loc.time}` : ''}</strong>
+            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${locationHistory.length - index}${loc.time ? ` - ${loc.time}` : ''}</strong>
             <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${formatAddressText(loc.address || loc.observations)}</span>
             ${loc.observations && !isStreetAddress(loc.observations) && formatAddressText(loc.observations) !== formatAddressText(loc.address || loc.observations) ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${formatAddressText(loc.observations)}</span>` : ''}
           </div>
@@ -4358,7 +4359,7 @@ function App() {
                         alignItems: 'center', 
                         fontSize: '13px',
                         cursor: 'pointer',
-                        borderLeft: idx === locationHistory.length - 1 ? '3px solid var(--accent-primary)' : '3px solid hsl(142, 60%, 45%)'
+                        borderLeft: idx === 0 ? '3px solid var(--accent-primary)' : '3px solid hsl(142, 60%, 45%)'
                       }}
                       onClick={() => {
                         if (mapInstanceRef.current) {
@@ -4373,10 +4374,10 @@ function App() {
                         {loc.time ? (
                           <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
                             {loc.time} 
-                            {idx === locationHistory.length - 1 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}
+                            {idx === 0 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}
                           </span>
                         ) : (
-                          idx === locationHistory.length - 1 && (
+                          idx === 0 && (
                             <span style={{ fontWeight: '600', color: 'var(--accent-hover)', fontSize: '11px' }}>(Mais recente)</span>
                           )
                         )}
