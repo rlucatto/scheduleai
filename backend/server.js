@@ -52,7 +52,7 @@ import {
   updateContactTags
 } from './services/tags.js';
 import { initPushService, getPublicKey } from './services/push.js';
-import { saveDBSubscription, saveDBLocationRecord, getDBLocations } from './services/db.js';
+import { saveDBSubscription, saveDBLocationRecord, getDBLocations, deleteDBLocationRecordByTimestamp } from './services/db.js';
 import { reverseGeocodeWithEstablishment, getHaversineDistance } from './services/travel.js';
 
 const app = express();
@@ -1008,20 +1008,34 @@ app.post('/api/location/track', async (req, res) => {
       return res.status(400).json({ error: 'Both latitude and longitude are required' });
     }
 
-    // Check distance to previous point
+    // Clean up intermediate coordinates if user is staying at the same place
     const allLocations = await getDBLocations();
-    if (allLocations && allLocations.length > 0) {
-      const sorted = [...allLocations].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      const latest = sorted[0];
-      const dist = getHaversineDistance(
+    let intermediateToDelete = null;
+
+    if (allLocations && allLocations.length >= 2) {
+      // Sort in chronological order (oldest to newest)
+      const sorted = [...allLocations].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      const last = sorted[sorted.length - 1];
+      const prev = sorted[sorted.length - 2];
+      
+      const distNewToLast = getHaversineDistance(
         parseFloat(latitude), parseFloat(longitude),
-        parseFloat(latest.latitude), parseFloat(latest.longitude)
+        parseFloat(last.latitude), parseFloat(last.longitude)
+      );
+      const distLastToPrev = getHaversineDistance(
+        parseFloat(last.latitude), parseFloat(last.longitude),
+        parseFloat(prev.latitude), parseFloat(prev.longitude)
       );
       
-      if (dist < 50) { // 50 meters threshold
-        console.log(`[LOCATION TRACKING] Location too close to last point (${dist.toFixed(1)}m < 50m). Skipping save.`);
-        return res.json({ success: true, skipped: true, reason: 'too_close', distance: dist });
+      // Threshold of 80 meters to define same location
+      if (distNewToLast < 80 && distLastToPrev < 80) {
+        intermediateToDelete = last;
       }
+    }
+
+    if (intermediateToDelete) {
+      console.log(`[LOCATION TRACKING] Deleting intermediate point at same location: timestamp=${intermediateToDelete.timestamp}`);
+      await deleteDBLocationRecordByTimestamp(intermediateToDelete.timestamp);
     }
 
     const { address, establishment } = await reverseGeocodeWithEstablishment(latitude, longitude);

@@ -363,4 +363,30 @@ export const getDBLocations = async () => {
   return [];
 };
 
+export const deleteDBLocationRecordByTimestamp = async (timestamp) => {
+  if (isFirebaseInitialized) {
+    try {
+      const snapshot = await db.collection('locations').where('timestamp', '==', timestamp).get();
+      const promises = snapshot.docs.map(doc => doc.ref.delete());
+      await Promise.all(promises);
+      console.log(`[DB] Location record with timestamp ${timestamp} deleted from Firestore.`);
+    } catch (err) {
+      console.error('[DB] Error deleting location from Firestore:', err.message);
+    }
+  }
+  try {
+    if (fs.existsSync(LOCATIONS_FILE)) {
+      let locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, 'utf8'));
+      const initialLength = locations.length;
+      locations = locations.filter(loc => loc.timestamp !== timestamp);
+      if (locations.length < initialLength) {
+        fs.writeFileSync(LOCATIONS_FILE, JSON.stringify(locations, null, 2), 'utf8');
+        console.log(`[DB] Location record with timestamp ${timestamp} deleted locally.`);
+      }
+    }
+  } catch (err) {
+    console.error('[DB] Error deleting location from local file:', err.message);
+  }
+};
+
 
