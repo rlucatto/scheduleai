@@ -456,16 +456,6 @@ function App() {
         mapInstanceRef.current = new googleMaps.Map(mapContainerRef.current, {
           center: center,
           zoom: 14,
-          styles: [
-            { elementType: "geometry", stylers: [{ color: "#1e1e1e" }] },
-            { elementType: "labels.text.stroke", stylers: [{ color: "#1e1e1e" }] },
-            { elementType: "labels.text.fill", stylers: [{ color: "#aaaaaa" }] },
-            { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
-            { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
-            { featureType: "road", elementType: "geometry", stylers: [{ color: "#334155" }] },
-            { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-            { featureType: "poi", elementType: "geometry", stylers: [{ color: "#1e293b" }] }
-          ],
           disableDefaultUI: false,
         });
       } else {
