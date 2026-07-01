@@ -389,4 +389,30 @@ export const deleteDBLocationRecordByTimestamp = async (timestamp) => {
   }
 };
 
+export const clearAllDBLocations = async () => {
+  if (isFirebaseInitialized) {
+    try {
+      const snapshot = await db.collection('locations').get();
+      if (snapshot.size > 0) {
+        const batch = db.batch();
+        snapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+        console.log(`[DB] Deleted ${snapshot.size} location documents from Firestore.`);
+      } else {
+        console.log('[DB] No Firestore documents found to clear.');
+      }
+    } catch (err) {
+      console.error('[DB] Error clearing Firestore locations:', err.message);
+    }
+  }
+  try {
+    fs.writeFileSync(LOCATIONS_FILE, JSON.stringify([], null, 2), 'utf8');
+    console.log('[DB] Cleared local locations.json successfully.');
+  } catch (err) {
+    console.error('[DB] Error clearing local locations:', err.message);
+  }
+};
+
 
