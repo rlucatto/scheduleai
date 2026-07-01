@@ -418,7 +418,7 @@ function App() {
       if (!mapInstanceRef.current) {
         mapInstanceRef.current = new googleMaps.Map(mapContainerRef.current, {
           center: center,
-          zoom: 13,
+          zoom: 14,
           styles: [
             { elementType: "geometry", stylers: [{ color: "#1e1e1e" }] },
             { elementType: "labels.text.stroke", stylers: [{ color: "#1e1e1e" }] },
@@ -433,9 +433,46 @@ function App() {
         });
       } else {
         mapInstanceRef.current.setCenter(center);
+        mapInstanceRef.current.setZoom(14);
       }
 
       const map = mapInstanceRef.current;
+
+      // Smart background GPS watch auto-centering on smartphone
+      const isMobileDevice = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      if (isMobileDevice && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (mapInstanceRef.current) {
+              const gpsPos = { lat: position.coords.latitude, lng: position.coords.longitude };
+              mapInstanceRef.current.setCenter(gpsPos);
+              mapInstanceRef.current.setZoom(16);
+
+              // Add a temporary marker for current location
+              const currentMarker = new googleMaps.Marker({
+                position: gpsPos,
+                map: mapInstanceRef.current,
+                title: "Você está aqui",
+                icon: {
+                  path: googleMaps.SymbolPath.FORWARD_CLOSED_ARROW,
+                  scale: 5,
+                  fillColor: "#06b6d4",
+                  fillOpacity: 1,
+                  strokeColor: "#ffffff",
+                  strokeWeight: 2,
+                }
+              });
+              setTimeout(() => {
+                currentMarker.setMap(null);
+              }, 10000);
+            }
+          },
+          (err) => {
+            console.warn('[Map Mount] Auto GPS centering failed:', err);
+          },
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
+      }
 
       // Clear old markers
       markersRef.current.forEach((m) => m.setMap(null));
@@ -495,14 +532,6 @@ function App() {
         }
       });
 
-      if (locationHistory.length > 0) {
-        if (locationHistory.length === 1) {
-          map.setCenter({ lat: locationHistory[0].latitude, lng: locationHistory[0].longitude });
-          map.setZoom(14);
-        } else {
-          map.fitBounds(bounds);
-        }
-      }
     }).catch(err => {
       console.error('Error loading Google Maps:', err);
     });
