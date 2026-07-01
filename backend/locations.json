@@ -196,5 +196,14 @@
     "longitude": -87.701913,
     "address": "2015 Dempster St, Evanston, IL 60201, EUA",
     "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
+  },
+  {
+    "date": "2026-07-01",
+    "time": "21:29:12",
+    "timestamp": "2026-07-01T02:29:12.616Z",
+    "latitude": 42.040931,
+    "longitude": -87.701913,
+    "address": "2015 Dempster St, Evanston, IL 60201, EUA",
+    "observations": "Estabelecimento: 2015 Dempster St, Evanston, IL 60201, EUA"
   }
 ]

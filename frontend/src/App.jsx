@@ -546,9 +546,9 @@ function App() {
 
         const popupContent = `
           <div style="font-family: sans-serif; color: #1e293b; padding: 4px; min-width: 150px; line-height: 1.4;">
-            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${index + 1} - ${loc.time}</strong>
-            <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${formatAddressText(loc.address)}</span>
-            ${loc.observations && formatAddressText(loc.observations) !== formatAddressText(loc.address) ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${loc.observations}</span>` : ''}
+            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${index + 1}${loc.time ? ` - ${loc.time}` : ''}</strong>
+            <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${formatAddressText(loc.address || loc.observations)}</span>
+            ${loc.observations && formatAddressText(loc.observations) !== formatAddressText(loc.address || loc.observations) ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${formatAddressText(loc.observations)}</span>` : ''}
           </div>
         `;
 
@@ -4362,12 +4362,21 @@ function App() {
                       }}
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{loc.time} {idx === locationHistory.length - 1 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}</span>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAddressText(loc.address)}</span>
+                        {loc.time ? (
+                          <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                            {loc.time} 
+                            {idx === locationHistory.length - 1 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}
+                          </span>
+                        ) : (
+                          idx === locationHistory.length - 1 && (
+                            <span style={{ fontWeight: '600', color: 'var(--accent-hover)', fontSize: '11px' }}>(Mais recente)</span>
+                          )
+                        )}
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAddressText(loc.address || loc.observations)}</span>
                       </div>
-                      {loc.observations && formatAddressText(loc.observations) !== formatAddressText(loc.address) && (
+                      {loc.observations && formatAddressText(loc.observations) !== formatAddressText(loc.address || loc.observations) && (
                         <span style={{ fontSize: '11px', padding: '2px 8px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: '4px', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                          {loc.observations}
+                          {formatAddressText(loc.observations)}
                         </span>
                       )}
                     </div>
