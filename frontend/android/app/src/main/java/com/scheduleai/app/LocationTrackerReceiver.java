@@ -52,17 +52,21 @@ public class LocationTrackerReceiver extends BroadcastReceiver {
         
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 1001, intent, flags);
 
-        // Calculate next 10-minute boundary (e.g. :00, :10, :20, :30, :40, :50)
+        // Calculate next even minute boundary (e.g. :00, :02, :04, ... :58)
         Calendar calendar = Calendar.getInstance();
         int minute = calendar.get(Calendar.MINUTE);
-        int nextMinute = ((minute / 10) + 1) * 10;
+        int nextMinute;
+        if (minute % 2 == 0) {
+            nextMinute = minute + 2;
+        } else {
+            nextMinute = minute + 1;
+        }
         
-        calendar.set(Calendar.MINUTE, nextMinute);
+        calendar.set(Calendar.MINUTE, nextMinute >= 60 ? nextMinute - 60 : nextMinute);
         calendar.set(Calendar.SECOND, 0);
         calendar.set(Calendar.MILLISECOND, 0);
 
         if (nextMinute >= 60) {
-            calendar.set(Calendar.MINUTE, 0);
             calendar.add(Calendar.HOUR_OF_DAY, 1);
         }
 
