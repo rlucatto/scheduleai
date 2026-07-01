@@ -406,7 +406,7 @@ function App() {
     setActiveSecondTab('location');
     fetchLocationHistory(selectedLocationDate);
     
-    if (navigator.geolocation) {
+    if (window.Capacitor && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
@@ -1971,9 +1971,7 @@ function App() {
 
   // Periodic User Location Tracking (Smart background GPS watch) - Mobile GPS Only
   useEffect(() => {
-    const isMobileDevice = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (!isMobileDevice) {
-      console.log('[LOCATION TRACKING] Non-mobile device detected. Skipping GPS tracking.');
+    if (!window.Capacitor) {
       return;
     }
 
