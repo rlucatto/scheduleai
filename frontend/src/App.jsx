@@ -36,7 +36,8 @@ import {
   Tag,
   Star,
   Edit2,
-  Download
+  Download,
+  Compass
 } from 'lucide-react';
 
 const parseBold = (text) => {
@@ -506,6 +507,60 @@ function App() {
       console.error('Error loading Google Maps:', err);
     });
   }, [activeSecondTab, locationHistory, googleMapsKey]);
+
+  const [isCenteringMap, setIsCenteringMap] = useState(false);
+
+  const centerMapOnCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      alert("A geolocalização não é suportada por este dispositivo.");
+      return;
+    }
+    
+    setIsCenteringMap(true);
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsCenteringMap(false);
+        if (mapInstanceRef.current && window.google && window.google.maps) {
+          const pos = { lat: position.coords.latitude, lng: position.coords.longitude };
+          
+          mapInstanceRef.current.setCenter(pos);
+          mapInstanceRef.current.setZoom(16);
+          
+          // Add a temporary marker for the current location
+          const currentMarker = new window.google.maps.Marker({
+            position: pos,
+            map: mapInstanceRef.current,
+            title: "Você está aqui",
+            icon: {
+              path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+              scale: 5,
+              fillColor: "#06b6d4",
+              fillOpacity: 1,
+              strokeColor: "#ffffff",
+              strokeWeight: 2,
+            }
+          });
+          
+          setTimeout(() => {
+            currentMarker.setMap(null);
+          }, 10000);
+        } else {
+          alert("O mapa ainda não foi carregado.");
+        }
+      },
+      (error) => {
+        setIsCenteringMap(false);
+        console.error('Error getting current location for map centering:', error);
+        alert("Não foi possível obter a sua localização atual. Verifique as permissões de GPS.");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  };
 
   useEffect(() => {
     console.log('[SCROLL] useEffect triggered:', {
@@ -4157,6 +4212,34 @@ function App() {
                   <RefreshCw size={24} className="spin-anim" />
                 </div>
               )}
+              
+              {/* Botão para centralizar na localização atual */}
+              <button 
+                onClick={centerMapOnCurrentLocation}
+                title="Centralizar na Localização Atual"
+                style={{
+                  position: 'absolute',
+                  top: '24px',
+                  right: '24px',
+                  zIndex: 2,
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                  backdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: 'var(--accent-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                className="map-locate-btn"
+              >
+                <Compass size={20} className={isCenteringMap ? "spin-anim" : ""} />
+              </button>
               
               <div 
                 ref={mapContainerRef} 
