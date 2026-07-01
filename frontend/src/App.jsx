@@ -377,6 +377,43 @@ function App() {
     }
   };
 
+  const handleOpenLocationTab = () => {
+    setActiveSecondTab('location');
+    fetchLocationHistory(selectedLocationDate);
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log('[AUTO-TRACK] Tab open location capture:', latitude, longitude);
+          try {
+            const res = await fetch(`${BACKEND_URL}/api/location/track`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                latitude, 
+                longitude, 
+                observations: 'Acessou a aba Localização' 
+              })
+            });
+            if (res.ok) {
+              const todayStr = new Date().toISOString().split('T')[0];
+              if (selectedLocationDate === todayStr) {
+                fetchLocationHistory(selectedLocationDate);
+              }
+            }
+          } catch (err) {
+            console.error('[AUTO-TRACK] Error saving location on tab open:', err);
+          }
+        },
+        (error) => {
+          console.warn('[AUTO-TRACK] GPS failed on tab open:', error.message);
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+      );
+    }
+  };
+
   const navigateDay = (amount) => {
     const current = new Date(selectedLocationDate + 'T12:00:00');
     current.setDate(current.getDate() + amount);
@@ -3160,7 +3197,7 @@ function App() {
           </button>
           <button 
             className={`btn-tab ${activeSecondTab === 'location' ? 'active' : ''}`}
-            onClick={() => { setActiveSecondTab('location'); fetchLocationHistory(selectedLocationDate); }}
+            onClick={handleOpenLocationTab}
             style={{
               background: 'transparent',
               border: 'none',
