@@ -1067,12 +1067,38 @@ app.post('/api/location/track', async (req, res) => {
 
 app.get('/api/location/history', async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, timezone } = req.query;
     if (!date) {
       return res.status(400).json({ error: 'Date query parameter is required (YYYY-MM-DD)' });
     }
     const allLocations = await getDBLocations();
-    const filtered = allLocations.filter(loc => loc.date === date);
+    const filtered = allLocations.filter(loc => {
+      if (loc.timestamp) {
+        try {
+          const dObj = new Date(loc.timestamp);
+          let localDateStr = '';
+          if (timezone) {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            });
+            const parts = formatter.formatToParts(dObj);
+            const y = parts.find(p => p.type === 'year').value;
+            const m = parts.find(p => p.type === 'month').value;
+            const d = parts.find(p => p.type === 'day').value;
+            localDateStr = `${y}-${m}-${d}`;
+          } else {
+            localDateStr = dObj.toISOString().split('T')[0];
+          }
+          return localDateStr === date;
+        } catch (e) {
+          // ignore parsing error, fallback to stored date string
+        }
+      }
+      return loc.date === date;
+    });
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });

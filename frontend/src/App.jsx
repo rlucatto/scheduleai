@@ -384,7 +384,17 @@ function App() {
     return addressPart;
   };
 
-  const formatTimeText = (timeStr) => {
+  const formatTimeText = (timeStr, timestamp) => {
+    if (timestamp) {
+      try {
+        const dateObj = new Date(timestamp);
+        const hours = String(dateObj.getHours()).padStart(2, '0');
+        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+      } catch (e) {
+        console.error('Error parsing timestamp for local time:', e);
+      }
+    }
     if (!timeStr) return '';
     const parts = timeStr.split(':');
     if (parts.length >= 2) {
@@ -396,7 +406,8 @@ function App() {
   const fetchLocationHistory = async (dateStr) => {
     setIsLoadingLocations(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/location/history?date=${dateStr}`);
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const res = await fetch(`${BACKEND_URL}/api/location/history?date=${dateStr}&timezone=${encodeURIComponent(tz)}`);
       if (res.ok) {
         const data = await res.json();
         const sorted = data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -551,7 +562,7 @@ function App() {
         const marker = new googleMaps.Marker({
           position: position,
           map: map,
-          title: `Ponto #${locationHistory.length - index} - ${formatTimeText(loc.time)}`,
+          title: `Ponto #${locationHistory.length - index} - ${formatTimeText(loc.time, loc.timestamp)}`,
           icon: {
             path: googleMaps.SymbolPath.CIRCLE,
             fillColor: color,
@@ -564,7 +575,7 @@ function App() {
 
         const popupContent = `
           <div style="font-family: sans-serif; color: #1e293b; padding: 4px; min-width: 150px; line-height: 1.4;">
-            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${locationHistory.length - index}${loc.time ? ` - ${formatTimeText(loc.time)}` : ''}</strong>
+            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${locationHistory.length - index}${loc.time ? ` - ${formatTimeText(loc.time, loc.timestamp)}` : ''}</strong>
             <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${formatAddressText(loc.address || loc.observations)}</span>
             ${loc.observations && !isStreetAddress(loc.observations) && formatAddressText(loc.observations) !== formatAddressText(loc.address || loc.observations) ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${formatAddressText(loc.observations)}</span>` : ''}
           </div>
@@ -4380,7 +4391,7 @@ function App() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {loc.time ? (
                           <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                            {formatTimeText(loc.time)} 
+                            {formatTimeText(loc.time, loc.timestamp)} 
                             {idx === 0 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}
                           </span>
                         ) : (
