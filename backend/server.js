@@ -52,7 +52,7 @@ import {
   updateContactTags
 } from './services/tags.js';
 import { initPushService, getPublicKey } from './services/push.js';
-import { saveDBSubscription, saveDBLocationRecord, getDBLocations, deleteDBLocationRecordByTimestamp } from './services/db.js';
+import { saveDBSubscription, saveDBLocationRecord, getDBLocations, deleteDBLocationRecordByTimestamp, updateDBLocationEndTime } from './services/db.js';
 import { reverseGeocodeWithEstablishment, getHaversineDistance } from './services/travel.js';
 
 const app = express();
@@ -1008,46 +1008,44 @@ app.post('/api/location/track', async (req, res) => {
       return res.status(400).json({ error: 'Both latitude and longitude are required' });
     }
 
-    // Clean up intermediate coordinates if user is staying at the same place
     const allLocations = await getDBLocations();
-    let intermediateToDelete = null;
+    let shouldUpdateLastRecord = false;
+    let lastRecord = null;
 
-    if (allLocations && allLocations.length >= 2) {
-      // Sort in chronological order (oldest to newest)
+    if (allLocations && allLocations.length > 0) {
       const sorted = [...allLocations].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-      const last = sorted[sorted.length - 1];
-      const prev = sorted[sorted.length - 2];
+      lastRecord = sorted[sorted.length - 1];
       
       const distNewToLast = getHaversineDistance(
         parseFloat(latitude), parseFloat(longitude),
-        parseFloat(last.latitude), parseFloat(last.longitude)
-      );
-      const distLastToPrev = getHaversineDistance(
-        parseFloat(last.latitude), parseFloat(last.longitude),
-        parseFloat(prev.latitude), parseFloat(prev.longitude)
+        parseFloat(lastRecord.latitude), parseFloat(lastRecord.longitude)
       );
       
-      // Threshold of 80 meters to define same location
-      if (distNewToLast < 80 && distLastToPrev < 80) {
-        intermediateToDelete = last;
+      if (distNewToLast <= 50) {
+        shouldUpdateLastRecord = true;
       }
     }
-
-    if (intermediateToDelete) {
-      console.log(`[LOCATION TRACKING] Deleting intermediate point at same location: timestamp=${intermediateToDelete.timestamp}`);
-      await deleteDBLocationRecordByTimestamp(intermediateToDelete.timestamp);
-    }
-
-    const { address, establishment } = await reverseGeocodeWithEstablishment(latitude, longitude);
 
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().split(' ')[0];
 
+    if (shouldUpdateLastRecord && lastRecord) {
+      console.log(`[LOCATION TRACKING] Within 50m. Updating end time for record: timestamp=${lastRecord.timestamp}`);
+      await updateDBLocationEndTime(lastRecord.timestamp, timeStr, now.toISOString());
+      await checkLocationArrivalDeparture(latitude, longitude);
+      return res.json({ success: true, updated: true, recordId: lastRecord.timestamp });
+    }
+
+    const { address, establishment } = await reverseGeocodeWithEstablishment(latitude, longitude);
+
     const record = {
       date: dateStr,
       time: timeStr,
+      startTime: timeStr,
+      endTime: timeStr,
       timestamp: now.toISOString(),
+      endTimestamp: now.toISOString(),
       latitude,
       longitude,
       address,
@@ -1055,8 +1053,6 @@ app.post('/api/location/track', async (req, res) => {
     };
 
     await saveDBLocationRecord(record);
-    
-    // Check if user arrived or left any scheduled calendar events
     await checkLocationArrivalDeparture(latitude, longitude);
 
     res.json({ success: true, record });

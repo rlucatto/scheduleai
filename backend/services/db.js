@@ -415,4 +415,36 @@ export const clearAllDBLocations = async () => {
   }
 };
 
+export const updateDBLocationEndTime = async (startTimestamp, endTime, endTimestamp) => {
+  if (isFirebaseInitialized) {
+    try {
+      const snapshot = await db.collection('locations').where('timestamp', '==', startTimestamp).get();
+      if (!snapshot.empty) {
+        const docRef = snapshot.docs[0].ref;
+        await docRef.update({
+          endTime: endTime,
+          endTimestamp: endTimestamp
+        });
+        console.log(`[DB] Updated endTime in Firestore for record started at ${startTimestamp}`);
+      }
+    } catch (err) {
+      console.error('[DB] Error updating location endTime in Firestore:', err.message);
+    }
+  }
+  try {
+    if (fs.existsSync(LOCATIONS_FILE)) {
+      let locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, 'utf8'));
+      const index = locations.findIndex(loc => loc.timestamp === startTimestamp);
+      if (index !== -1) {
+        locations[index].endTime = endTime;
+        locations[index].endTimestamp = endTimestamp;
+        fs.writeFileSync(LOCATIONS_FILE, JSON.stringify(locations, null, 2), 'utf8');
+        console.log(`[DB] Updated endTime locally for record started at ${startTimestamp}`);
+      }
+    }
+  } catch (err) {
+    console.error('[DB] Error updating location endTime locally:', err.message);
+  }
+};
+
 

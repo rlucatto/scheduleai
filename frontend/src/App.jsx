@@ -403,6 +403,17 @@ function App() {
     return timeStr;
   };
 
+  const renderTimeRange = (loc) => {
+    if (!loc) return '';
+    const startLocal = formatTimeText(loc.startTime || loc.time, loc.timestamp);
+    const endLocal = formatTimeText(loc.endTime || loc.time, loc.endTimestamp || loc.timestamp);
+    
+    if (startLocal && endLocal && startLocal !== endLocal) {
+      return `${startLocal} - ${endLocal}`;
+    }
+    return startLocal || endLocal;
+  };
+
   const fetchLocationHistory = async (dateStr) => {
     setIsLoadingLocations(true);
     try {
@@ -562,7 +573,7 @@ function App() {
         const marker = new googleMaps.Marker({
           position: position,
           map: map,
-          title: `Ponto #${locationHistory.length - index} - ${formatTimeText(loc.time, loc.timestamp)}`,
+          title: `Ponto #${locationHistory.length - index} - ${renderTimeRange(loc)}`,
           icon: {
             path: googleMaps.SymbolPath.CIRCLE,
             fillColor: color,
@@ -575,7 +586,7 @@ function App() {
 
         const popupContent = `
           <div style="font-family: sans-serif; color: #1e293b; padding: 4px; min-width: 150px; line-height: 1.4;">
-            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${locationHistory.length - index}${loc.time ? ` - ${formatTimeText(loc.time, loc.timestamp)}` : ''}</strong>
+            <strong style="display:block; margin-bottom: 2px; color: #1e293b;">Ponto #${locationHistory.length - index}${(loc.time || loc.startTime) ? ` - ${renderTimeRange(loc)}` : ''}</strong>
             <span style="font-size: 11px; display:block; color: #64748b; margin-bottom: 4px;">${formatAddressText(loc.address || loc.observations)}</span>
             ${loc.observations && !isStreetAddress(loc.observations) && formatAddressText(loc.observations) !== formatAddressText(loc.address || loc.observations) ? `<span style="font-size: 11px; padding: 2px 6px; background-color: #e2e8f0; border-radius: 4px; color: #334155; display: inline-block; font-weight: 500;">${formatAddressText(loc.observations)}</span>` : ''}
           </div>
@@ -4389,9 +4400,9 @@ function App() {
                       }}
                     >
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {loc.time ? (
+                        {(loc.time || loc.startTime) ? (
                           <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                            {formatTimeText(loc.time, loc.timestamp)} 
+                            {renderTimeRange(loc)} 
                             {idx === 0 && <span style={{ color: 'var(--accent-hover)', fontSize: '11px', marginLeft: '6px' }}>(Mais recente)</span>}
                           </span>
                         ) : (
