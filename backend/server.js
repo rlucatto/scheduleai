@@ -1115,12 +1115,13 @@ app.get('/api/app/version', (req, res) => {
 });
 
 app.get('/api/app/download', (req, res) => {
-  const apkPath = path.join(process.cwd(), 'backend', 'public', 'update.apk');
+  const baseDir = process.cwd().endsWith('backend') ? process.cwd() : path.join(process.cwd(), 'backend');
+  const apkPath = path.join(baseDir, 'public', 'update.apk');
   if (fs.existsSync(apkPath)) {
     res.download(apkPath, 'update.apk');
   } else {
     // If update.apk doesn't exist, we will create a 1KB dummy file for demonstration on the fly
-    const publicDir = path.join(process.cwd(), 'backend', 'public');
+    const publicDir = path.join(baseDir, 'public');
     if (!fs.existsSync(publicDir)) {
       fs.mkdirSync(publicDir, { recursive: true });
     }
