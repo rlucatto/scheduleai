@@ -130,18 +130,17 @@ export const searchGoogleContacts = async (query) => {
   const people = google.people({ version: 'v1', auth: oauth2Client });
 
   try {
-    // Warmup request as recommended by the API
     await people.people.searchContacts({
       query: '',
       readMask: 'names',
       pageSize: 1
-    });
+    }, { timeout: 10000 });
 
     const res = await people.people.searchContacts({
       query: query,
       readMask: 'names,emailAddresses,phoneNumbers,addresses,birthdays',
       pageSize: 10
-    });
+    }, { timeout: 10000 });
 
     const results = res.data.results || [];
     
@@ -219,7 +218,7 @@ export const createGoogleContact = async (contactData) => {
         addresses,
         birthdays
       }
-    });
+    }, { timeout: 10000 });
 
     const person = res.data;
     const bdayObj = person.birthdays?.[0]?.date;
@@ -268,7 +267,7 @@ export const updateGoogleContact = async (resourceName, contactData) => {
     const res = await people.people.get({
       resourceName: resourceName,
       personFields: 'names,emailAddresses,phoneNumbers,addresses,metadata,birthdays'
-    });
+    }, { timeout: 10000 });
 
     const person = res.data;
     const updateFields = [];
@@ -317,13 +316,13 @@ export const updateGoogleContact = async (resourceName, contactData) => {
       resourceName: resourceName,
       updatePersonFields: updateFields.join(','),
       requestBody: person
-    });
+    }, { timeout: 10000 });
 
     // 4. Retrieve the updated contact with all fields to return it complete
     const finalRes = await people.people.get({
       resourceName: resourceName,
       personFields: 'names,emailAddresses,phoneNumbers,addresses,metadata,birthdays'
-    });
+    }, { timeout: 10000 });
 
     const updatedPerson = finalRes.data;
     const bdayObj = updatedPerson.birthdays?.[0]?.date;
@@ -361,7 +360,7 @@ export const listGoogleContacts = async () => {
       resourceName: 'people/me',
       personFields: 'names,emailAddresses,phoneNumbers,addresses,birthdays',
       pageSize: 1000
-    });
+    }, { timeout: 10000 });
 
     const connections = res.data.connections || [];
     return connections.map(person => {
@@ -410,7 +409,7 @@ export const deleteGoogleContact = async (resourceName) => {
   try {
     await people.people.deleteContact({
       resourceName: resourceName
-    });
+    }, { timeout: 10000 });
     return { success: true };
   } catch (error) {
     console.error('Error deleting contact:', error);

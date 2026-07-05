@@ -545,21 +545,36 @@ const sendNotification = (type, data) => {
   });
 };
 
+let isSchedulerRunning = false;
+
+const runSchedulerLoop = async () => {
+  if (isSchedulerRunning) return;
+  isSchedulerRunning = true;
+  try {
+    await checkUpcomingEvents();
+  } catch (err) {
+    console.error('[SCHEDULER LOOP] Error checking upcoming events:', err);
+  } finally {
+    isSchedulerRunning = false;
+    // Schedule next run in 60 seconds
+    if (schedulerInterval) {
+      schedulerInterval = setTimeout(runSchedulerLoop, 60000);
+    }
+  }
+};
+
 export const startScheduler = (io) => {
   ioInstance = io;
-  if (schedulerInterval) clearInterval(schedulerInterval);
+  if (schedulerInterval) clearTimeout(schedulerInterval);
   
-  // Check triggers every minute to ensure alerts are responsive
-  schedulerInterval = setInterval(checkUpcomingEvents, 60000);
-  console.log('Scheduler Service Started (checking triggers every 60s)');
-  
-  // Run an initial check immediately
-  checkUpcomingEvents();
+  // Use setTimeout based loop to prevent concurrent execution overlaps
+  schedulerInterval = setTimeout(runSchedulerLoop, 0);
+  console.log('Scheduler Service Started (checking triggers with safe interval)');
 };
 
 export const stopScheduler = () => {
   if (schedulerInterval) {
-    clearInterval(schedulerInterval);
+    clearTimeout(schedulerInterval);
     schedulerInterval = null;
     console.log('Scheduler Service Stopped');
   }

@@ -15,6 +15,9 @@ const MOCK_TRAVEL_TIMES = [
   { keywords: ['jantar', 'shopping'], durationSeconds: 1800, distanceText: '11.0 km', durationText: '30 mins' }
 ];
 
+const travelCache = new Map();
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
+
 export const getTravelTime = async (origin, destination, mode = 'driving') => {
   const mapsKey = process.env.GOOGLE_MAPS_API_KEY;
   const travelMode = mode || 'driving';
@@ -29,6 +32,18 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
     };
   }
 
+  const cacheKey = `${origin.toString().trim()}|${destination.toString().trim()}|${travelMode}`;
+  const now = Date.now();
+  if (travelCache.has(cacheKey)) {
+    const entry = travelCache.get(cacheKey);
+    if (entry.expiresAt > now) {
+      console.log(`[TRAVEL CACHE] Returning cached travel time for: "${destination}"`);
+      return entry.data;
+    }
+  }
+
+  let result = null;
+
   // If Google Maps API key is configured, try using it
   if (mapsKey && mapsKey !== 'your_google_maps_api_key_here') {
     try {
@@ -40,13 +55,14 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
             destination,
             mode: travelMode,
             key: mapsKey
-          }
+          },
+          timeout: 5000 // 5 seconds timeout to prevent hanging connections
         }
       );
 
       if (response.data.status === 'OK' && response.data.routes && response.data.routes.length > 0) {
         const leg = response.data.routes[0].legs[0];
-        return {
+        result = {
           durationSeconds: leg.duration.value,
           distanceText: leg.distance.text,
           durationText: leg.duration.text,
@@ -62,39 +78,49 @@ export const getTravelTime = async (origin, destination, mode = 'driving') => {
     }
   }
 
-  // Fallback / Mock Mode: Match keywords from destination name to find realistic travel values
-  const destLower = destination.toLowerCase();
-  const matched = MOCK_TRAVEL_TIMES.find(item =>
-    item.keywords.some(keyword => destLower.includes(keyword))
-  );
+  if (!result) {
+    // Fallback / Mock Mode: Match keywords from destination name to find realistic travel values
+    const destLower = destination.toLowerCase();
+    const matched = MOCK_TRAVEL_TIMES.find(item =>
+      item.keywords.some(keyword => destLower.includes(keyword))
+    );
 
-  if (matched) {
-    return {
-      durationSeconds: matched.durationSeconds,
-      distanceText: matched.distanceText,
-      durationText: matched.durationText,
-      originAddress: origin || 'Minha Localização',
-      destinationAddress: destination,
-      mode: travelMode,
-      isMock: true
-    };
+    if (matched) {
+      result = {
+        durationSeconds: matched.durationSeconds,
+        distanceText: matched.distanceText,
+        durationText: matched.durationText,
+        originAddress: origin || 'Minha Localização',
+        destinationAddress: destination,
+        mode: travelMode,
+        isMock: true
+      };
+    } else {
+      // Catch-all default mock fallback (e.g. 25 minutes, 10km)
+      // Generates a stable random-like travel time based on the string length of the destination
+      const baseTime = 1000 + (destination.length * 15) % 1800; // between 1000s (16m) and 2800s (46m)
+      const durationMin = Math.round(baseTime / 60);
+      const distanceKm = (durationMin * 0.45).toFixed(1); // average speed driving math
+
+      result = {
+        durationSeconds: baseTime,
+        distanceText: `${distanceKm} km`,
+        durationText: `${durationMin} mins`,
+        originAddress: origin || 'Minha Localização',
+        destinationAddress: destination,
+        mode: travelMode,
+        isMock: true
+      };
+    }
   }
 
-  // Catch-all default mock fallback (e.g. 25 minutes, 10km)
-  // Generates a stable random-like travel time based on the string length of the destination
-  const baseTime = 1000 + (destination.length * 15) % 1800; // between 1000s (16m) and 2800s (46m)
-  const durationMin = Math.round(baseTime / 60);
-  const distanceKm = (durationMin * 0.45).toFixed(1); // average speed driving math
+  // Save to cache before returning
+  travelCache.set(cacheKey, {
+    expiresAt: Date.now() + CACHE_TTL_MS,
+    data: result
+  });
 
-  return {
-    durationSeconds: baseTime,
-    distanceText: `${distanceKm} km`,
-    durationText: `${durationMin} mins`,
-    originAddress: origin || 'Minha Localização',
-    destinationAddress: destination,
-    mode: travelMode,
-    isMock: true
-  };
+  return result;
 };
 
 export const reverseGeocode = async (coords) => {

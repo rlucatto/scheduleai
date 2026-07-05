@@ -37,8 +37,10 @@ import {
   Star,
   Edit2,
   Download,
-  Compass
+  Compass,
+  Droplet
 } from 'lucide-react';
+import WaterTracker from './components/WaterTracker';
 
 const parseBold = (text) => {
   return text.split('**').map((chunk, cIdx) => {
@@ -168,8 +170,12 @@ const getBackendUrl = () => {
                       (window.location.hostname === 'localhost' && window.location.protocol === 'https:') ||
                       /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  const saved = localStorage.getItem('backend_url');
+  let saved = localStorage.getItem('backend_url');
   if (saved) {
+    if (saved.includes('schedule-ai-hz68.onrender.com')) {
+      saved = saved.replace('schedule-ai-hz68.onrender.com', 'scheduleai-hz68.onrender.com');
+      localStorage.setItem('backend_url', saved);
+    }
     if (isCapacitor && (saved.includes('localhost') || saved.includes('127.0.0.1'))) {
       // Ignore invalid local loops inside mobile webview
     } else {
@@ -269,7 +275,11 @@ function App() {
   const testConnection = async (urlToTest) => {
     setConnectionTestStatus('testing');
     try {
-      const normalizedUrl = (urlToTest || BACKEND_URL).trim().replace(/\/$/, '');
+      let normalizedUrl = (urlToTest || BACKEND_URL).trim().replace(/\/$/, '');
+      if (normalizedUrl.includes('schedule-ai-hz68.onrender.com')) {
+        normalizedUrl = normalizedUrl.replace('schedule-ai-hz68.onrender.com', 'scheduleai-hz68.onrender.com');
+        setBackendUrlInput(normalizedUrl);
+      }
       const res = await fetch(`${normalizedUrl}/api/auth/status`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
@@ -320,6 +330,11 @@ function App() {
   const [canDrag, setCanDrag] = useState(false);
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateVersionName, setUpdateVersionName] = useState('');
+  const [updateApkUrl, setUpdateApkUrl] = useState('');
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [updateError, setUpdateError] = useState('');
   const [activeSecondTab, setActiveSecondTab] = useState('agenda');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('chat');
@@ -351,6 +366,51 @@ function App() {
       };
     }
   }, []);
+
+  useEffect(() => {
+    const checkAppUpdate = async () => {
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppUpdate) {
+        try {
+          console.log('[UPDATE] Checking version from AppUpdate plugin...');
+          const localVer = await window.Capacitor.Plugins.AppUpdate.getAppVersion();
+          console.log('[UPDATE] Local app version:', localVer);
+
+          const res = await fetch(`${BACKEND_URL}/api/app/version`);
+          if (res.ok) {
+            const serverVer = await res.json();
+            console.log('[UPDATE] Server version info:', serverVer);
+            
+            if (serverVer.versionCode > localVer.versionCode) {
+              setUpdateVersionName(serverVer.versionName);
+              setUpdateApkUrl(serverVer.apkUrl);
+              setShowUpdateModal(true);
+            }
+          }
+        } catch (err) {
+          console.error('[UPDATE] Error checking version:', err);
+        }
+      }
+    };
+
+    checkAppUpdate();
+  }, []);
+
+  const handlePerformUpdate = async () => {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.AppUpdate) return;
+    setIsDownloadingUpdate(true);
+    setUpdateError('');
+    try {
+      console.log('[UPDATE] Initiating download from:', updateApkUrl);
+      await window.Capacitor.Plugins.AppUpdate.downloadAndInstallUpdate({ url: updateApkUrl });
+      console.log('[UPDATE] Native installer triggered successfully.');
+      setShowUpdateModal(false);
+      setIsDownloadingUpdate(false);
+    } catch (err) {
+      console.error('[UPDATE] Download/install failed:', err);
+      setUpdateError('Falha no download da atualização. Verifique sua conexão.');
+      setIsDownloadingUpdate(false);
+    }
+  };
 
   const [selectedLocationDate, setSelectedLocationDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
@@ -1886,7 +1946,11 @@ function App() {
   const handleSavePrefs = async (e) => {
     e.preventDefault();
     const oldUrl = (localStorage.getItem('backend_url') || 'http://localhost:5000').trim().replace(/\/$/, '');
-    const newUrl = (backendUrlInput || '').trim().replace(/\/$/, '');
+    let newUrl = (backendUrlInput || '').trim().replace(/\/$/, '');
+    if (newUrl.includes('schedule-ai-hz68.onrender.com')) {
+      newUrl = newUrl.replace('schedule-ai-hz68.onrender.com', 'scheduleai-hz68.onrender.com');
+      setBackendUrlInput(newUrl);
+    }
     
     if (newUrl !== oldUrl) {
       localStorage.setItem('backend_url', newUrl);
@@ -3259,6 +3323,26 @@ function App() {
             <MapPin size={18} />
             Localização
           </button>
+          <button 
+            className={`btn-tab ${activeSecondTab === 'water' ? 'active' : ''}`}
+            onClick={() => setActiveSecondTab('water')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: activeSecondTab === 'water' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+              borderBottom: activeSecondTab === 'water' ? '2px solid var(--accent-hover)' : 'none',
+              paddingBottom: '6px',
+              fontWeight: '600',
+              fontSize: '15px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <Droplet size={18} />
+            Bem-estar
+          </button>
         </div>
 
         {activeSecondTab === 'agenda' ? (
@@ -3775,6 +3859,8 @@ function App() {
               )}
             </div>
           </>
+        ) : activeSecondTab === 'water' ? (
+          <WaterTracker />
         ) : activeSecondTab === 'todo' ? (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -4978,6 +5064,99 @@ function App() {
                 Entendi
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* App Auto-Update Modal */}
+      {showUpdateModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1200,
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div className="glass" style={{
+            width: '90%',
+            maxWidth: '450px',
+            borderRadius: '16px',
+            border: '1px solid var(--border-color)',
+            background: 'rgba(23, 23, 23, 0.95)',
+            boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5)',
+            padding: '24px',
+            textAlign: 'center',
+            animation: 'scaleUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+              <div style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Sparkles size={32} style={{ color: 'var(--accent-hover)' }} />
+              </div>
+            </div>
+
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)' }}>
+              Nova Versão Disponível!
+            </h3>
+            
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.5' }}>
+              Uma atualização do ScheduleAI está pronta. Versão mais recente: <strong>v{updateVersionName}</strong>. 
+              Deseja baixar e aplicar a atualização agora?
+            </p>
+
+            {updateError && (
+              <div style={{
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '8px',
+                padding: '10px',
+                marginBottom: '20px',
+                fontSize: '13px',
+                color: '#f87171',
+                textAlign: 'left'
+              }}>
+                ⚠️ {updateError}
+              </div>
+            )}
+
+            {isDownloadingUpdate ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', margin: '20px 0' }}>
+                <div className="spinner" style={{ borderTopColor: 'var(--accent-hover)' }}></div>
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Baixando atualização...</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginTop: '24px' }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowUpdateModal(false)}
+                  style={{ padding: '10px 24px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' }}
+                >
+                  Lembrar Depois
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handlePerformUpdate}
+                  style={{ padding: '10px 24px', borderRadius: '8px', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Download size={16} />
+                  Atualizar Agora
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 dotenv.config();
 dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
@@ -123,6 +124,7 @@ app.get('/api/auth/callback', async (req, res) => {
   }
 
   try {
+    const tokens = await handleAuthCode(code);
     const lastKeyValue = getLastKeyValueUsed();
     const maskedKey = lastKeyValue ? `${lastKeyValue.substring(0, 8)}...${lastKeyValue.substring(lastKeyValue.length - 4)}` : '';
     io.emit('auth_change', { 
@@ -432,16 +434,18 @@ app.post('/api/auth/save-tokens', async (req, res) => {
     return res.status(400).json({ error: 'Missing tokens' });
   }
   try {
+    await saveTokens(tokens);
+    const authStatus = getAuthStatus();
     const lastKeyValue = getLastKeyValueUsed();
     const maskedKey = lastKeyValue ? `${lastKeyValue.substring(0, 8)}...${lastKeyValue.substring(lastKeyValue.length - 4)}` : '';
     io.emit('auth_change', { 
-      status, 
+      status: authStatus, 
       preferences: getPreferences(), 
       lastModelUsed: getLastModelUsed(),
       lastKeyUsed: getLastKeyUsed(),
       lastKeyStringUsed: maskedKey
     });
-    res.json({ success: true, status });
+    res.json({ success: true, status: authStatus });
   } catch (err) {
     console.error('[OAUTH] Failed to save tokens manually:', err.message);
     res.status(500).json({ error: err.message });
@@ -1098,6 +1102,30 @@ app.get('/api/location/history', async (req, res) => {
     res.json(filtered);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. Application Self-Update Routes
+app.get('/api/app/version', (req, res) => {
+  res.json({
+    versionCode: 17,
+    versionName: "2.6",
+    apkUrl: `${req.protocol}://${req.get('host')}/api/app/download`
+  });
+});
+
+app.get('/api/app/download', (req, res) => {
+  const apkPath = path.join(process.cwd(), 'backend', 'public', 'update.apk');
+  if (fs.existsSync(apkPath)) {
+    res.download(apkPath, 'update.apk');
+  } else {
+    // If update.apk doesn't exist, we will create a 1KB dummy file for demonstration on the fly
+    const publicDir = path.join(process.cwd(), 'backend', 'public');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    fs.writeFileSync(apkPath, Buffer.alloc(1024)); // dummy 1KB APK file
+    res.download(apkPath, 'update.apk');
   }
 });
 

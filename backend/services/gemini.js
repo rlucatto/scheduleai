@@ -185,7 +185,7 @@ const classifyRequest = (message = '') => {
     // Bureaucratic and document renewal search queries
     'cnh', 'carteira', 'habilitação', 'habilitacao', 'detran', 'poupatempo', 'dmv', 'passaporte', 'visto', 'licenciamento', 'documento', 'documentos', 'rg',
     // Weather, medical, flights, and restaurant proactivity search queries
-    'clima', 'tempo', 'chuva', 'previsão', 'previsao', 'exame', 'médico', 'medico', 'jejum', 'sangue', 'consulta', 'dentista', 'voo', 'passagem', 'aeroporto', 'embarque', 'reserva', 'almoço', 'jantar', 'futebol', 'parque', 'praia'
+    'clima', 'tempo', 'chuva', 'previsão', 'previsao', 'exame', 'médico', 'medico', 'jejum', 'sangue', 'consulta', 'dentista', 'voo', 'passagem', 'aeroporto', 'embarque', 'reserva', 'almoço', 'jantar', 'futebol', 'parque', 'praia', 'jogo', 'jogos', 'versus', 'vs'
   ];
   
   let needsSearch = searchKeywords.some(kw => msgLower.includes(kw));
@@ -364,7 +364,10 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
           break; // Success! Break retry loop
         } catch (error) {
           const errorMsg = error.message || '';
-          if (errorMsg.includes('429') || errorMsg.includes('Quota exceeded') || errorMsg.includes('quota') || errorMsg.includes('503')) {
+          if (errorMsg.toLowerCase().includes('prepayment') || errorMsg.toLowerCase().includes('depleted') || errorMsg.toLowerCase().includes('billing')) {
+            console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Billing/Prepayment Depleted). Blacklisting this key for 1 hour.`);
+            active.keyInfo.blacklistedUntil = Date.now() + 60 * 60 * 1000; // 1 hour blacklist
+          } else if (errorMsg.includes('429') || errorMsg.includes('Quota exceeded') || errorMsg.includes('quota') || errorMsg.includes('503')) {
             console.warn(`[KEY ROTATOR] Model "${modelName}" on key "${active.keyInfo.name}" failed (Quota/Limit). Blacklisting this key for 60 seconds.`);
             active.keyInfo.blacklistedUntil = Date.now() + 60 * 1000; // 60 seconds (RPM reset window)
           } else {
@@ -1778,16 +1781,10 @@ const _checkSingleModelHealthRaw = async (model) => {
         const testGenAI = new GoogleGenerativeAI(keyInfo.key);
         const testModel = testGenAI.getGenerativeModel({ model });
         
-        const generatePromise = testModel.generateContent({
+        const result = await testModel.generateContent({
           contents: [{ role: 'user', parts: [{ text: 'responder apenas OK' }] }],
-          generationConfig: { maxOutputTokens: 2 }
-        });
-        
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout de 5s')), 5000)
-        );
-        
-        const result = await Promise.race([generatePromise, timeoutPromise]);
+          generationConfig: { maxOutputTokens: 50 }
+        }, { timeout: 5000 });
         const text = result.response.text();
         
         if (text) {
@@ -1798,9 +1795,9 @@ const _checkSingleModelHealthRaw = async (model) => {
         }
       } catch (error) {
         const errorMsg = error.message || '';
-        if (errorMsg.includes('429') || errorMsg.includes('Quota exceeded') || errorMsg.includes('quota') || errorMsg.includes('503')) {
+        if (errorMsg.includes('429') || errorMsg.includes('Quota exceeded') || errorMsg.includes('quota') || errorMsg.includes('503') || errorMsg.toLowerCase().includes('depleted') || errorMsg.toLowerCase().includes('prepayment') || errorMsg.toLowerCase().includes('billing')) {
           keyInfo.blacklistedUntil = Date.now() + 60 * 60 * 1000; // Blacklist 1h
-          keyResults.push(`${keyInfo.name}: Cota Excedida (429)`);
+          keyResults.push(`${keyInfo.name}: Cota Excedida (429/Billing)`);
         } else {
           keyResults.push(`${keyInfo.name}: Erro (${errorMsg.substring(0, 40)})`);
         }
@@ -1951,7 +1948,7 @@ export const synthesizeSpeech = async (text, voice = 'Faber') => {
                 }
               }
             }
-          });
+          }, { timeout: 5000 });
 
           const parts = result.response.candidates?.[0]?.content?.parts || [];
           if (parts.length > 0 && parts[0].inlineData) {
@@ -1965,6 +1962,12 @@ export const synthesizeSpeech = async (text, voice = 'Faber') => {
           }
         } catch (err) {
           console.warn(`[AI TTS] Key "${keyInfo.name}" failed for modality "${modality}": ${err.message}`);
+          const errorMsg = err.message || '';
+          if (errorMsg.includes('429') || errorMsg.includes('Quota exceeded') || errorMsg.includes('quota') || errorMsg.includes('503') || errorMsg.toLowerCase().includes('depleted') || errorMsg.toLowerCase().includes('prepayment') || errorMsg.toLowerCase().includes('billing')) {
+            keyInfo.blacklistedUntil = Date.now() + 60 * 60 * 1000; // Blacklist 1h
+          } else {
+            keyInfo.blacklistedUntil = Date.now() + 30 * 1000; // Blacklist 30s
+          }
         }
       }
       console.warn(`[AI TTS] Key "${keyInfo.name}" could not generate audio. Trying next key in the pool...`);

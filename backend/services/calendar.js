@@ -35,7 +35,7 @@ const fetchUserEmail = async () => {
   if (!oauth2Client) return;
   try {
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-    const userInfo = await oauth2.userinfo.get();
+    const userInfo = await oauth2.userinfo.get({}, { timeout: 10000 });
     currentUserEmail = userInfo.data.email;
     console.log('[OAUTH] Successfully fetched user email:', currentUserEmail);
   } catch (err) {
@@ -148,6 +148,8 @@ export const listEvents = async (timeMin, timeMax) => {
       timeMax: timeMax || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       singleEvents: true,
       orderBy: 'startTime'
+    }, {
+      timeout: 10000
     });
     return response.data.items;
   } else {
@@ -186,7 +188,7 @@ export const insertEvent = async (eventData) => {
     // Fallback to primary calendar timezone if resolve failed and API is available
     if (timeZone === 'America/Sao_Paulo') {
       try {
-        const calInfo = await calendar.calendars.get({ calendarId: 'primary' });
+        const calInfo = await calendar.calendars.get({ calendarId: 'primary' }, { timeout: 10000 });
         timeZone = calInfo.data.timeZone || 'America/Sao_Paulo';
         console.log(`[CALENDAR] Auto-discovered calendar timezone: ${timeZone}`);
       } catch (tzErr) {
@@ -209,6 +211,8 @@ export const insertEvent = async (eventData) => {
     const response = await calendar.events.insert({
       calendarId: 'primary',
       requestBody: finalEventData
+    }, {
+      timeout: 10000
     });
     return response.data;
   } else {
@@ -237,6 +241,8 @@ export const deleteEvent = async (eventId) => {
     await calendar.events.delete({
       calendarId: 'primary',
       eventId: eventId
+    }, {
+      timeout: 10000
     });
     return { success: true };
   } else {
@@ -271,7 +277,7 @@ export const updateEvent = async (eventId, updatedFields) => {
     // Fallback to primary calendar timezone if resolve failed and API is available
     if (timeZone === 'America/Sao_Paulo') {
       try {
-        const calInfo = await calendar.calendars.get({ calendarId: 'primary' });
+        const calInfo = await calendar.calendars.get({ calendarId: 'primary' }, { timeout: 10000 });
         timeZone = calInfo.data.timeZone || 'America/Sao_Paulo';
       } catch (tzErr) {
         console.warn('[CALENDAR] Failed to fetch calendar timezone, defaulting to America/Sao_Paulo:', tzErr.message);
@@ -282,6 +288,8 @@ export const updateEvent = async (eventId, updatedFields) => {
     const event = await calendar.events.get({
       calendarId: 'primary',
       eventId: eventId
+    }, {
+      timeout: 10000
     });
     
     const merged = { ...event.data, ...updatedFields };
@@ -304,6 +312,8 @@ export const updateEvent = async (eventId, updatedFields) => {
       calendarId: 'primary',
       eventId: eventId,
       requestBody: merged
+    }, {
+      timeout: 10000
     });
     return response.data;
   } else {

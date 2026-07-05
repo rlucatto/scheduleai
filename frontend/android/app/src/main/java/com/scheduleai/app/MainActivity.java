@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         registerPlugin(WidgetSettingsPlugin.class);
+        registerPlugin(AppUpdatePlugin.class);
         
         // Start background 10-minute location tracking
         LocationTrackerReceiver.scheduleNextAlarm(this);
