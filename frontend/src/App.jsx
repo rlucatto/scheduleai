@@ -3000,7 +3000,7 @@ function App() {
               Instalação do Aplicativo
             </h3>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
-              Para usar o **Widget da Agenda na Tela Inicial** e ter rastreamento GPS preciso em background, é necessário instalar o **APK Nativo**. A versão **PWA (Web App)** é mais leve, mas não suporta Widgets de sistema do Android.
+              Para usar o **Widget da Agenda na Tela Inicial** e ter rastreamento GPS preciso em background, é necessário instalar o **APK Nativo (versão v{latestVersionName})**. A versão **PWA (Web App)** é mais leve, mas não suporta Widgets de sistema do Android.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
               {deferredPrompt && (
@@ -3047,10 +3047,10 @@ function App() {
                   cursor: 'pointer'
                 }}
               >
-                <Download size={14} /> Baixar APK Nativo (Suporta Widget)
+                <Download size={14} /> Baixar APK Nativo v{latestVersionName}
               </button>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '2px' }}>
-                Última Versão Disponível: v{latestVersionName} ({latestVersionCode || 1})
+                Versão disponível para download: v{latestVersionName} ({latestVersionCode || 1})
               </div>
             </div>
           </div>
