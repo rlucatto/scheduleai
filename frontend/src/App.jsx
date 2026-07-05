@@ -3030,7 +3030,7 @@ function App() {
                 className="btn btn-primary" 
                 onClick={() => {
                   const link = document.createElement('a');
-                  link.href = '/scheduleai.apk';
+                  link.href = `${BACKEND_URL}/api/app/download`;
                   link.download = 'scheduleai.apk';
                   document.body.appendChild(link);
                   link.click();
