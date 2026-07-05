@@ -335,6 +335,11 @@ function App() {
   const [updateApkUrl, setUpdateApkUrl] = useState('');
   const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
   const [updateError, setUpdateError] = useState('');
+  const [localVersionName, setLocalVersionName] = useState('1.0.0');
+  const [localVersionCode, setLocalVersionCode] = useState(1);
+  const [latestVersionName, setLatestVersionName] = useState('1.0.0');
+  const [latestVersionCode, setLatestVersionCode] = useState(1);
+  const [hasUpdateAvailable, setHasUpdateAvailable] = useState(false);
   const [activeSecondTab, setActiveSecondTab] = useState('agenda');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('chat');
@@ -369,25 +374,34 @@ function App() {
 
   useEffect(() => {
     const checkAppUpdate = async () => {
+      let serverVer = null;
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/app/version`);
+        if (res.ok) {
+          serverVer = await res.json();
+          setLatestVersionName(serverVer.versionName);
+          setLatestVersionCode(serverVer.versionCode);
+          setUpdateApkUrl(serverVer.apkUrl);
+        }
+      } catch (err) {
+        console.error('[UPDATE] Error fetching server version:', err);
+      }
+
       if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppUpdate) {
         try {
           console.log('[UPDATE] Checking version from AppUpdate plugin...');
           const localVer = await window.Capacitor.Plugins.AppUpdate.getAppVersion();
           console.log('[UPDATE] Local app version:', localVer);
+          setLocalVersionName(localVer.versionName);
+          setLocalVersionCode(localVer.versionCode);
 
-          const res = await fetch(`${BACKEND_URL}/api/app/version`);
-          if (res.ok) {
-            const serverVer = await res.json();
-            console.log('[UPDATE] Server version info:', serverVer);
-            
-            if (serverVer.versionCode > localVer.versionCode) {
-              setUpdateVersionName(serverVer.versionName);
-              setUpdateApkUrl(serverVer.apkUrl);
-              setShowUpdateModal(true);
-            }
+          if (serverVer && serverVer.versionCode > localVer.versionCode) {
+            setUpdateVersionName(serverVer.versionName);
+            setHasUpdateAvailable(true);
+            setShowUpdateModal(true);
           }
         } catch (err) {
-          console.error('[UPDATE] Error checking version:', err);
+          console.error('[UPDATE] Error fetching local version:', err);
         }
       }
     };
@@ -2928,24 +2942,99 @@ function App() {
           )}
         </div>
 
-        {/* Android APK Download Card */}
-        <div className="card glass" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <h3 className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Download size={16} style={{ color: 'var(--accent-hover)' }} />
-            Instalação do Aplicativo
-          </h3>
-          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
-            Para usar o **Widget da Agenda na Tela Inicial** e ter rastreamento GPS preciso em background, é necessário instalar o **APK Nativo**. A versão **PWA (Web App)** é mais leve, mas não suporta Widgets de sistema do Android.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-            {deferredPrompt && (
+        {/* Version / Installation Card */}
+        {window.Capacitor ? (
+          <div className="card glass" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <h3 className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={16} style={{ color: 'var(--accent-hover)' }} />
+              Versão do Aplicativo
+            </h3>
+            <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '6px', color: 'var(--text-secondary)' }}>
+              <div>
+                <strong>Versão Atual:</strong> <span style={{ color: 'var(--text-primary)' }}>v{localVersionName} ({localVersionCode})</span>
+              </div>
+              <div>
+                <strong>Última Versão:</strong> <span style={{ color: 'var(--text-primary)' }}>v{latestVersionName} ({latestVersionCode})</span>
+              </div>
+            </div>
+            {latestVersionCode > localVersionCode ? (
               <button 
-                className="btn btn-secondary" 
-                onClick={async () => {
-                  deferredPrompt.prompt();
-                  const { outcome } = await deferredPrompt.userChoice;
-                  console.log(`User response to PWA install prompt: ${outcome}`);
-                  setDeferredPrompt(null);
+                className="btn btn-primary" 
+                onClick={handlePerformUpdate}
+                disabled={isDownloadingUpdate}
+                style={{ 
+                  fontSize: '12px', 
+                  padding: '8px 12px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: '6px', 
+                  width: '100%',
+                  cursor: 'pointer',
+                  marginTop: '4px'
+                }}
+              >
+                <Download size={14} /> {isDownloadingUpdate ? 'Atualizando...' : 'Atualizar Aplicativo'}
+              </button>
+            ) : (
+              <div style={{ 
+                fontSize: '11px', 
+                color: '#4caf50', 
+                fontWeight: '500', 
+                marginTop: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                ✓ Você está usando a versão mais recente!
+              </div>
+            )}
+            {updateError && (
+              <small style={{ color: 'var(--error-color)', display: 'block', fontSize: '11px' }}>{updateError}</small>
+            )}
+          </div>
+        ) : (
+          <div className="card glass" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <h3 className="section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={16} style={{ color: 'var(--accent-hover)' }} />
+              Instalação do Aplicativo
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
+              Para usar o **Widget da Agenda na Tela Inicial** e ter rastreamento GPS preciso em background, é necessário instalar o **APK Nativo**. A versão **PWA (Web App)** é mais leve, mas não suporta Widgets de sistema do Android.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+              {deferredPrompt && (
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={async () => {
+                    deferredPrompt.prompt();
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`User response to PWA install prompt: ${outcome}`);
+                    setDeferredPrompt(null);
+                  }}
+                  style={{ 
+                    fontSize: '12px', 
+                    padding: '8px 12px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '6px', 
+                    width: '100%',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Plus size={14} /> Instalar Versão PWA (Leve)
+                </button>
+              )}
+              <button 
+                className="btn btn-primary" 
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = '/scheduleai.apk';
+                  link.download = 'scheduleai.apk';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
                 }}
                 style={{ 
                   fontSize: '12px', 
@@ -2958,34 +3047,14 @@ function App() {
                   cursor: 'pointer'
                 }}
               >
-                <Plus size={14} /> Instalar Versão PWA (Leve)
+                <Download size={14} /> Baixar APK Nativo (Suporta Widget)
               </button>
-            )}
-            <button 
-              className="btn btn-primary" 
-              onClick={() => {
-                const link = document.createElement('a');
-                link.href = '/scheduleai.apk';
-                link.download = 'scheduleai.apk';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }}
-              style={{ 
-                fontSize: '12px', 
-                padding: '8px 12px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                gap: '6px', 
-                width: '100%',
-                cursor: 'pointer'
-              }}
-            >
-              <Download size={14} /> Baixar APK Nativo (Suporta Widget)
-            </button>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: '2px' }}>
+                Última Versão Disponível: v{latestVersionName} ({latestVersionCode || 1})
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Quick actions triggers */}
         <div className="card glass" style={{ marginTop: 'auto' }}>
