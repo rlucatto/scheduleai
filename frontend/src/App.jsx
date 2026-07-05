@@ -3418,11 +3418,47 @@ function App() {
                 }
               });
 
+              const upcomingDepartures = dayEvents.filter(e => {
+                const timeDiffMs = e.departure.getTime() - now.getTime();
+                return timeDiffMs > 0 && timeDiffMs <= 60 * 60 * 1000;
+              });
+
               return (
                 <div className="card glass" style={{ padding: '20px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <h3 style={{ fontSize: '15px', margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Clock size={16} /> Visualização Diária (Horários Ocupados)
                   </h3>
+                  
+                  {upcomingDepartures.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {upcomingDepartures.map(event => {
+                        const minsLeft = Math.ceil((event.departure.getTime() - now.getTime()) / (60 * 1000));
+                        return (
+                          <div 
+                            key={`alert-${event.eventId}`}
+                            style={{
+                              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              borderRadius: '8px',
+                              padding: '12px 16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              color: '#f59e0b',
+                              fontWeight: '500',
+                              fontSize: '13px',
+                              boxShadow: '0 4px 12px rgba(245, 158, 11, 0.05)'
+                            }}
+                          >
+                            <span style={{ fontSize: '18px' }}>🚗</span>
+                            <div style={{ flex: 1 }}>
+                              Alerta de Saída: Você precisa sair para o compromisso <strong>{event.summary}</strong> em <strong>{minsLeft} {minsLeft === 1 ? 'minuto' : 'minutos'}</strong> (horário de saída: {formatTime(event.departure)}).
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   
                   {/* Legenda */}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '12px' }}>
