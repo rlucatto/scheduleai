@@ -1719,7 +1719,8 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
         }
 
         if (needsConfirmation) {
-          const finalConfirmationText = responseText ? (responseText.trim() + '\n\n' + confirmationText) : confirmationText;
+          const cleanedResponseText = cleanResponseTextForConfirmation(responseText);
+          const finalConfirmationText = cleanedResponseText ? (cleanedResponseText.trim() + '\n\n' + confirmationText) : confirmationText;
           return {
             text: finalConfirmationText,
             toolCalls: allExecutedToolCalls
@@ -2000,4 +2001,29 @@ export const synthesizeSpeech = async (text, voice = 'Faber') => {
   }
 
   throw new Error('Nenhum dado de áudio foi retornado por nenhuma das opções de síntese (nuvem e local).');
+};
+
+export const cleanResponseTextForConfirmation = (text) => {
+  if (!text) return '';
+  
+  const confirmationPatterns = [
+    /você quer que eu agende/i,
+    /me confirma/i,
+    /posso agendar/i,
+    /confirma para mim/i,
+    /bora agendar/i,
+    /confirmar\?/i,
+    /deseja que eu crie/i,
+    /gostaria que eu agendasse/i,
+    /quer que eu crie/i,
+    /quer que eu agende/i,
+    /deseja confirmar/i
+  ];
+
+  const sentences = text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [text];
+  const filteredSentences = sentences.filter(sentence => {
+    return !confirmationPatterns.some(pattern => pattern.test(sentence));
+  });
+
+  return filteredSentences.join('').trim();
 };
