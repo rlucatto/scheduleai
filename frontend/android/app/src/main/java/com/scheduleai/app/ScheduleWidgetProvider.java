@@ -202,6 +202,30 @@ public class ScheduleWidgetProvider extends AppWidgetProvider {
                 }
             });
 
+            // Add countdown of minutes to leave if it is less than 1 hour to departure
+            long nowMs = System.currentTimeMillis();
+            String widgetTitle = "⏰ Cronograma";
+            for (EventItem item : parsedEvents) {
+                if (nowMs < item.departureMs) {
+                    long diffMs = item.departureMs - nowMs;
+                    long diffMinutes = diffMs / (60 * 1000);
+                    if (diffMinutes >= 0 && diffMinutes <= 60) {
+                        String summary = item.summary;
+                        if (summary != null) {
+                            summary = summary.trim();
+                            if (summary.length() > 15) {
+                                summary = summary.substring(0, 12) + "...";
+                            }
+                        } else {
+                            summary = "";
+                        }
+                        widgetTitle = "⏰ Sair em " + diffMinutes + " min (" + summary + ")";
+                        break;
+                    }
+                }
+            }
+            views.setTextViewText(R.id.widget_title, widgetTitle);
+
             // Set up transparent overlay areas on the timeline chart for the next upcoming event (item 0)
             if (parsedEvents.size() > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && totalDuration > 0) {
                 EventItem firstItem = parsedEvents.get(0);
