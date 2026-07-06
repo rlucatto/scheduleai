@@ -521,6 +521,44 @@ app.get('/api/models/health/*', async (req, res) => {
   }
 });
 
+app.get('/api/logs/gemini', (req, res) => {
+  try {
+    const logFilePath = path.join(process.cwd(), 'logs', 'gemini_requests.log');
+    if (!fs.existsSync(logFilePath)) {
+      return res.json([]);
+    }
+    const fileContent = fs.readFileSync(logFilePath, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    
+    const parsedLogs = lines.map(line => {
+      const tsMatch = line.match(/^\[(.*?)\]/);
+      const timestamp = tsMatch ? tsMatch[1] : '';
+      
+      const modelMatch = line.match(/MODEL:\s*(.*?)\s*\|/);
+      const model = modelMatch ? modelMatch[1] : '';
+      
+      const actionMatch = line.match(/ACTION:\s*(.*?)\s*\|/);
+      const action = actionMatch ? actionMatch[1] : '';
+      
+      const reqMatch = line.match(/REQUEST:\s*(.*)$/);
+      let request = reqMatch ? reqMatch[1] : '';
+      
+      try {
+        request = JSON.parse(request);
+      } catch (e) {
+        // keep as string
+      }
+      
+      return { timestamp, model, action, request };
+    });
+    
+    res.json(parsedLogs.reverse().slice(0, 200));
+  } catch (error) {
+    console.error('Error fetching Gemini logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/preferences', async (req, res) => {
   const updated = await setPreferences(req.body);
   res.json(updated);

@@ -337,6 +337,12 @@ function App() {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   const [canDrag, setCanDrag] = useState(false);
+  
+  // Gemini API Request logs modal states
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [logsData, setLogsData] = useState([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [expandedPayloads, setExpandedPayloads] = useState({});
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -2060,6 +2066,36 @@ function App() {
     handleSendChat(choice);
   };
 
+  const handleOpenLogsModal = async () => {
+    setShowLogsModal(true);
+    setIsLoadingLogs(true);
+    setExpandedPayloads({});
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/logs/gemini`);
+      const data = await res.json();
+      setLogsData(data);
+    } catch (err) {
+      console.error('Error fetching Gemini logs:', err);
+      addCustomToast('Erro', 'Não foi possível carregar as requisições.', 'error');
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const handleRefreshLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/logs/gemini`);
+      const data = await res.json();
+      setLogsData(data);
+    } catch (err) {
+      console.error('Error refreshing Gemini logs:', err);
+      addCustomToast('Erro', 'Não foi possível recarregar as requisições.', 'error');
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
   // Fetch event calculations
   const fetchTimeline = async () => {
     setIsLoadingTimeline(true);
@@ -3178,6 +3214,14 @@ function App() {
                     );
                   })}
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '11px', marginTop: '8px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'rgba(255,255,255,0.03)' }}
+                  onClick={handleOpenLogsModal}
+                >
+                  🔍 Visualizar Requisições (Logs Gemini)
+                </button>
               </div>
 
               <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
@@ -3262,6 +3306,13 @@ function App() {
                     onClick={() => setShowCharacteristicsModal(true)}
                   >
                     Ver características dos modelos
+                  </button>
+                  <button
+                    type="button"
+                    style={{ background: 'transparent', border: 'none', color: 'var(--accent-hover)', cursor: 'pointer', padding: '0', fontSize: '11px', textDecoration: 'underline', display: 'block', marginTop: '6px', textAlign: 'left' }}
+                    onClick={handleOpenLogsModal}
+                  >
+                    🔍 Visualizar Requisições (Logs Gemini)
                   </button>
                 </div>
               </div>
@@ -5836,6 +5887,143 @@ function App() {
             <p style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center' }}>
               💡 <em>O ScheduleAI escolhes e ordena os modelos dinamicamente com base nas palavras-chave do seu pedido.</em>
             </p>
+          </div>
+        </div>
+      )}
+
+      {showLogsModal && (
+        <div className="modal-overlay" onClick={() => setShowLogsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', width: '90%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MessageSquare size={18} style={{ color: 'var(--accent-primary)' }} />
+                <h3 style={{ margin: 0 }}>Requisições da API Gemini</h3>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button 
+                  className="btn btn-secondary"
+                  onClick={handleRefreshLogs}
+                  disabled={isLoadingLogs}
+                  style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <RefreshCw size={12} className={isLoadingLogs ? 'spin-anim' : ''} />
+                  <span>Atualizar</span>
+                </button>
+                <button className="modal-close" style={{ position: 'static' }} onClick={() => setShowLogsModal(false)}>✕</button>
+              </div>
+            </div>
+
+            <div style={{ overflowY: 'auto', padding: '16px 0', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {isLoadingLogs && logsData.length === 0 ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                  <RefreshCw className="spin-anim" size={32} style={{ color: 'var(--accent-primary)' }} />
+                </div>
+              ) : logsData.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                  <Info size={24} style={{ marginBottom: '8px' }} />
+                  <span>Nenhuma requisição registrada ainda.</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {logsData.map((log, index) => {
+                    const isExpanded = !!expandedPayloads[index];
+                    const dateFormatted = log.timestamp ? new Date(log.timestamp).toLocaleString('pt-BR') : '';
+                    
+                    return (
+                      <div 
+                        key={index} 
+                        style={{ 
+                          padding: '12px', 
+                          background: 'rgba(255, 255, 255, 0.02)', 
+                          border: '1px solid var(--border-color)', 
+                          borderRadius: '8px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{dateFormatted}</span>
+                            <span 
+                              style={{ 
+                                fontSize: '10px', 
+                                fontWeight: '600', 
+                                padding: '2px 8px', 
+                                background: 'rgba(124, 58, 237, 0.15)', 
+                                color: '#a78bfa', 
+                                border: '1px solid rgba(124, 58, 237, 0.3)', 
+                                borderRadius: '12px' 
+                              }}
+                            >
+                              {log.model}
+                            </span>
+                            <span 
+                              style={{ 
+                                fontSize: '10px', 
+                                padding: '2px 6px', 
+                                background: 'rgba(255,255,255,0.06)', 
+                                color: 'var(--text-secondary)', 
+                                borderRadius: '4px' 
+                              }}
+                            >
+                              {log.action}
+                            </span>
+                          </div>
+                          
+                          <button
+                            onClick={() => setExpandedPayloads(prev => ({ ...prev, [index]: !isExpanded }))}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--accent-hover)',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              padding: '2px 8px',
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            {isExpanded ? 'Ocultar Payload' : 'Ver Payload'}
+                          </button>
+                        </div>
+
+                        {isExpanded && (
+                          <pre 
+                            style={{ 
+                              margin: '4px 0 0 0', 
+                              padding: '10px', 
+                              background: 'rgba(0, 0, 0, 0.3)', 
+                              border: '1px solid rgba(255, 255, 255, 0.05)', 
+                              borderRadius: '6px', 
+                              fontSize: '11px', 
+                              fontFamily: 'monospace', 
+                              color: '#d1d5db', 
+                              whiteSpace: 'pre-wrap', 
+                              wordBreak: 'break-all', 
+                              maxHeight: '300px', 
+                              overflowY: 'auto' 
+                            }}
+                          >
+                            {typeof log.request === 'object' ? JSON.stringify(log.request, null, 2) : log.request}
+                          </pre>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            
+            <div style={{ borderTop: '1px solid var(--border-color)', padding: '12px 0 0 0', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setShowLogsModal(false)}
+                style={{ padding: '8px 20px' }}
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
