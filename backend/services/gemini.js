@@ -429,6 +429,31 @@ async function callOpenAiCompatible(serviceName, endpointUrl, apiKey, modelName,
       allExecutedToolCalls.push(...assistantMessage.tool_calls);
     }
 
+    // Detect unified rescheduling (delete old + create new)
+    const deleteCall = toolCalls.find(c => c.name === 'delete_calendar_event' && !c.args.confirmed);
+    const createCall = toolCalls.find(c => c.name === 'create_calendar_event' && !c.args.confirmed);
+
+    if (deleteCall && createCall) {
+      let eventSummary = 'compromisso antigo';
+      try {
+        const events = await listEvents();
+        const event = events.find(e => e.id === deleteCall.args.eventId);
+        if (event) {
+          eventSummary = `"${event.summary}"`;
+        }
+      } catch (e) {
+        console.error('Error fetching event for deletion confirmation in callOpenAiCompatible:', e);
+      }
+      const dateStr = formatDateTimePtBr(createCall.args.startTime);
+      const name = getFriendlyUserName();
+      confirmationText = `Então, ${name}! Confirma que deseja reagendar o compromisso ${eventSummary} para ${dateStr}?`;
+      needsConfirmation = true;
+    }
+
+    if (needsConfirmation) {
+      break;
+    }
+
     for (const call of toolCalls) {
       const { name, args, nativeCall } = call;
       console.log(`[${serviceName.toUpperCase()} TOOL CALLING] Executing function: ${name} with args:`, args);
@@ -813,7 +838,9 @@ Regras de atuação:
     - **Conflito e Agenda Silenciosos**: A verificação de compromissos existentes com 'list_calendar_events' deve ser 100% silenciosa. NÃO escreva mensagens dizendo que vai analisar a agenda ou que olhou sua agenda e está livre (evite falas como "Massa! Olhei sua agenda..."). Se não houver conflito de horário, continue silenciosamente o fluxo de agendamento sem comentar que a agenda está vazia ou livre. Apenas avise sobre compromissos se de fato houver um conflito ou proximidade de horários real (com diferença menor ou igual a 1 hora de início/fim).
 3. EXCLUSÃO DE COMPROMISSOS: Para apagar/cancelar, chame 'list_calendar_events' primeiro (busca ampla). Se houver 1 correspondência, exclua com 'delete_calendar_event'. Se múltiplas, apresente opções e peça para escolher. Se nenhuma, informe.
 4. CONFIRMAÇÃO DE COORDENADAS: Para homeAddress/workAddress com coordenadas, chame 'update_user_preferences'. Se retornar 'needs_confirmation', resolva com 'reverse_geocode', pergunte se o endereço resolvido está correto e só salve após a confirmação.
-5. CONFIRMAÇÃO DE CALENDÁRIO: Ao agendar um compromisso (quando você já possui o endereço e o horário definidos), você DEVE chamar as ferramentas 'list_calendar_events' (para verificar possíveis conflitos silenciosamente), 'check_travel_time' (para calcular o trânsito) e 'create_calendar_event' (com confirmed: false ou omitido) de forma simultânea/paralela na mesma resposta. Apresente os resultados de trânsito, o aviso de possíveis conflitos e o resumo dos detalhes calculados ao usuário, pedindo a confirmação final apenas para a criação definitiva (confirmed: true). Nunca peça permissão para calcular o trânsito ou agendar se você já puder exibir os dados reais chamando as ferramentas diretamente.
+5. CONFIRMAÇÃO DE CALENDÁRIO E REAGENDAMENTO: 
+    - Ao agendar um compromisso (quando você já possui o endereço e o horário definidos), você DEVE chamar as ferramentas 'list_calendar_events' (para verificar possíveis conflitos silenciosamente), 'check_travel_time' (para calcular o trânsito) e 'create_calendar_event' (com confirmed: false ou omitido) de forma simultânea/paralela na mesma resposta. Apresente os resultados de trânsito, o aviso de possíveis conflitos e o resumo dos detalhes calculados ao usuário, pedindo a confirmação final apenas para a criação definitiva (confirmed: true). Nunca peça permissão para calcular o trânsito ou agendar se você já puder exibir os dados reais chamando as ferramentas diretamente.
+    - Ao reagendar ou mover um compromisso existente, você DEVE chamar IMEDIATAMENTE as ferramentas 'delete_calendar_event' (para o compromisso antigo, com confirmed: false) e 'create_calendar_event' (para o novo horário, com confirmed: false) de forma simultânea/paralela na mesma resposta. NUNCA peça confirmação em texto puro antes de fazer a chamada das ferramentas; deixe que o sistema intercepte as ferramentas unificando a confirmação do usuário em apenas uma rodada (Turno único).
 6. ENDEREÇOS E LINKS DE GPS: Ao informar qualquer endereço ou localização no chat, ele deve estar SEMPRE no formato de link markdown para abrir no GPS/Google Maps: [Endereço por extenso](https://www.google.com/maps/search/?api=1&query=Endereço+URL+Encoded). Exemplo: [Rua Augusta, 1200, São Paulo](https://www.google.com/maps/search/?api=1&query=Rua%20Augusta%2C%201200%2C%20S%C3%A3o%20Paulo). Se o endereço estiver em coordenadas, primeiro chame 'reverse_geocode' para obter o endereço legível (Cidade, Rua, Número) e depois monte o link com ele. Nunca exiba coordenadas brutas.
 7. FILTRAGEM DE CONTATOS: Ao buscar endereço de contatos ('search_contacts'):
    - Se houver múltiplos registros com o mesmo nome, verifique o campo 'address'.
@@ -1917,6 +1944,31 @@ IMPORTANTE FUSO HORÁRIO: Quando você obtiver horários de eventos ou jogos da 
           console.log(`[AI] Model requested ${toolCalls.length} tool calls on turn ${turns}.`);
           allExecutedToolCalls.push(...toolCalls);
           const toolResponses = [];
+
+          // Detect unified rescheduling (delete old + create new)
+          const deleteCall = toolCalls.find(c => c.name === 'delete_calendar_event' && !c.args.confirmed);
+          const createCall = toolCalls.find(c => c.name === 'create_calendar_event' && !c.args.confirmed);
+
+          if (deleteCall && createCall) {
+            let eventSummary = 'compromisso antigo';
+            try {
+              const events = await listEvents();
+              const event = events.find(e => e.id === deleteCall.args.eventId);
+              if (event) {
+                eventSummary = `"${event.summary}"`;
+              }
+            } catch (e) {
+              console.error('Error fetching event for deletion confirmation in chatWithAssistant:', e);
+            }
+            const dateStr = formatDateTimePtBr(createCall.args.startTime);
+            const name = getFriendlyUserName();
+            confirmationText = `Então, ${name}! Confirma que deseja reagendar o compromisso ${eventSummary} para ${dateStr}?`;
+            needsConfirmation = true;
+          }
+
+          if (needsConfirmation) {
+            break;
+          }
 
           for (const call of toolCalls) {
             const { name, args } = call;
