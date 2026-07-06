@@ -1998,7 +1998,32 @@ function App() {
       text.includes('mais alguma pergunta') ||
       text.includes('fazer mais alguma');
 
-    if (isOpenEnded || isGenericFollowUp) return false;
+    // Exclude statements indicating the action has already been successfully completed
+    const isSuccessStatement = 
+      text.includes('já agendei') ||
+      text.includes('já apaguei') ||
+      text.includes('já criei') ||
+      text.includes('já alterei') ||
+      text.includes('já removi') ||
+      text.includes('já marquei') ||
+      text.includes('foi criado') ||
+      text.includes('foi excluído') ||
+      text.includes('foi apagado') ||
+      text.includes('foi removido') ||
+      text.includes('foi alterado') ||
+      text.includes('foi reagendado') ||
+      text.includes('compromisso criado') ||
+      text.includes('agendamento confirmado') ||
+      text.includes('exclusão confirmada') ||
+      text.includes('compromisso excluído') ||
+      text.includes('compromisso apagado') ||
+      text.includes('tudo pronto') ||
+      text.includes('pronto,') ||
+      text.includes('pronto!') ||
+      text.includes('feito!') ||
+      text.includes('feito,');
+
+    if (isOpenEnded || isGenericFollowUp || isSuccessStatement) return false;
 
     // Include yes/no confirmation patterns
     const hasConfirmationKeywords = 
