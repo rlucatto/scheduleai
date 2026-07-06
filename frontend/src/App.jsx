@@ -3330,6 +3330,7 @@ function App() {
                     </button>
                   )}
                 </div>
+              )}
               {msg.timestamp && (
                 <div style={{ 
                   fontSize: '9px', 
