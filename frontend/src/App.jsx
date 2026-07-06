@@ -38,7 +38,9 @@ import {
   Edit2,
   Download,
   Compass,
-  Droplet
+  Droplet,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import WaterTracker from './components/WaterTracker';
 
@@ -266,6 +268,12 @@ const getEventColor = (eventId, index) => {
   return colors[index % colors.length];
 };
 
+const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+const MONTH_NAMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+
 function App() {
   const [backendUrlInput, setBackendUrlInput] = useState(() => {
     return localStorage.getItem('backend_url') || BACKEND_URL;
@@ -343,6 +351,58 @@ function App() {
   const [activeSecondTab, setActiveSecondTab] = useState('agenda');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState('chat');
+
+  const [agendaSubTab, setAgendaSubTab] = useState('dia'); // 'dia', 'semana', 'mes'
+  const [selectedDate, setSelectedDate] = useState(new Date()); // used for navigating weeks and months
+  const [selectedDayInMonth, setSelectedDayInMonth] = useState(new Date()); // currently selected day in month grid
+  const [rangeCalculations, setRangeCalculations] = useState([]);
+  const [isLoadingRange, setIsLoadingRange] = useState(false);
+
+  const getWeekRange = (date) => {
+    const current = new Date(date);
+    const day = current.getDay();
+    const diff = current.getDate() - day; // adjust to Sunday
+    
+    const sunday = new Date(current.setDate(diff));
+    sunday.setHours(0, 0, 0, 0);
+    
+    const saturday = new Date(sunday);
+    saturday.setDate(sunday.getDate() + 6);
+    saturday.setHours(23, 59, 59, 999);
+    
+    return { timeMin: sunday.toISOString(), timeMax: saturday.toISOString() };
+  };
+
+  const getMonthRange = (year, month) => {
+    const firstDay = new Date(year, month, 1, 0, 0, 0, 0);
+    const lastDay = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    return { timeMin: firstDay.toISOString(), timeMax: lastDay.toISOString() };
+  };
+
+  const fetchRangeTimeline = async (timeMin, timeMax) => {
+    setIsLoadingRange(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/calendar/calculate?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`);
+      const data = await res.json();
+      setRangeCalculations(data);
+    } catch (err) {
+      console.error('Error fetching range timeline events:', err);
+    } finally {
+      setIsLoadingRange(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSecondTab !== 'agenda') return;
+
+    if (agendaSubTab === 'semana') {
+      const { timeMin, timeMax } = getWeekRange(selectedDate);
+      fetchRangeTimeline(timeMin, timeMax);
+    } else if (agendaSubTab === 'mes') {
+      const { timeMin, timeMax } = getMonthRange(selectedDate.getFullYear(), selectedDate.getMonth());
+      fetchRangeTimeline(timeMin, timeMax);
+    }
+  }, [agendaSubTab, selectedDate, activeSecondTab]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -3715,252 +3775,810 @@ function App() {
               );
             })()}
 
-            <div 
-              ref={appointmentsContainerRef}
-              className="timeline-grid"
-              style={{
-                maxHeight: '520px',
-                overflowY: 'auto',
-                paddingRight: '6px',
-                scrollBehavior: 'smooth'
-              }}
-            >
-              {calculations.length === 0 ? (
-                <div className="card glass" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
-                  <Calendar size={36} />
-                  <span>Nenhum compromisso agendado para as próximas 12 horas.</span>
-                  <span style={{ fontSize: '12px' }}>Use {isMobile ? 'a aba Conversa' : 'o chat assistente ao lado'} para agendar novos eventos!</span>
-                </div>
-              ) : (
-                calculations.map((calc, idx) => (
-                  <div 
-                    key={calc.eventId} 
-                    data-event-id={calc.eventId}
-                    className="card event-card has-triggers glass"
-                    style={{ borderLeft: `4px solid ${getEventColor(calc.eventId, idx)}` }}
-                  >
-                    <div className="event-header">
-                      <span className="event-time">
-                        {(() => { const d = formatDate(calc.eventStart); return d.charAt(0).toUpperCase() + d.slice(1); })()} {formatTime(calc.eventStart)} - {formatTime(calc.eventEnd || new Date(new Date(calc.eventStart).getTime() + 60 * 60 * 1000))}
-                      </span>
-                      <button className="btn btn-secondary" style={{ padding: '4px', border: 'none', background: 'transparent' }} onClick={() => handleDeleteEvent(calc.eventId)}>
-                        <Trash2 size={15} style={{ color: 'var(--danger)' }} />
-                      </button>
-                    </div>
-                    
-                    <div className="event-title">{calc.summary}</div>
-                    
-                    {calc.location && (
-                      <div className="event-location">
-                        <MapPin size={14} style={{ color: 'var(--accent-hover)' }} />
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(calc.location)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: 'var(--accent-hover)', textDecoration: 'underline', fontWeight: '500', cursor: 'pointer' }}
-                        >
-                          {calc.location}
-                        </a>
-                      </div>
-                    )}
-
-                    {calc.location && calc.travelData && (() => {
-                      const now = currentTime;
-                      const evStart = parseDateSafe(calc.eventStart);
-                      if (!evStart) return null;
-
-                      const evEnd = parseDateSafe(calc.eventEnd) || new Date(evStart.getTime() + 60 * 60 * 1000);
-                      const departure = parseDateSafe(calc.departureTime) || evStart;
-
-                      // Hide prep time if already in transit or arrived
-                      const isPastDeparture = now.getTime() > departure.getTime();
-                      const hasArrived = calc.description?.includes('[actual_arrival:') || now.getTime() > evStart.getTime();
-                      const hidePrep = isPastDeparture || hasArrived;
-
-                      const getReady = hidePrep ? departure : (parseDateSafe(calc.getReadyTime) || evStart);
-
-                      const prepDur = Math.max(0, Math.round((departure.getTime() - getReady.getTime()) / (60 * 1000)));
-                      const transitDur = Math.max(0, Math.round((evStart.getTime() - departure.getTime()) / (60 * 1000)));
-                      const apptDur = Math.max(0, Math.round((evEnd.getTime() - evStart.getTime()) / (60 * 1000)));
-                      
-                      const totalMinutes = prepDur + transitDur + apptDur;
-                      const prepPct = totalMinutes > 0 ? (prepDur / totalMinutes) * 100 : 0;
-                      const transitPct = totalMinutes > 0 ? (transitDur / totalMinutes) * 100 : 0;
-                      const apptPct = totalMinutes > 0 ? (apptDur / totalMinutes) * 100 : 0;
-                      
-                      const eventStartMs = getReady.getTime();
-                      const eventEndMs = evEnd.getTime();
-                      const eventDurationMs = eventEndMs - eventStartMs;
-                      const isNowInEvent = now.getTime() >= eventStartMs && now.getTime() <= eventEndMs;
-                      const nowEventPct = isNowInEvent && eventDurationMs > 0 
-                        ? ((now.getTime() - eventStartMs) / eventDurationMs) * 100 
-                        : 0;
-                      
-                      const posB = prepPct;
-                      const posC = prepPct + transitPct;
-                      
-                      const eventColor = getEventColor(calc.eventId, idx);
-
-                      return (
-                        <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          
-                          {/* Triggers indicator list */}
-                          <div className="trigger-indicator" style={{ marginBottom: '4px' }}>
-                            <div className="trigger-step" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px', marginBottom: '4px' }}>
-                              <span style={{ color: 'var(--text-secondary)' }}>Trânsito ({calc.travelData.distanceText}):</span>
-                              <span className="time" style={{ color: 'var(--accent-hover)' }}>{calc.travelData.durationText}</span>
-                            </div>
-                            <div className="trigger-step">
-                              <span>👔 Se Arrume (1h antes):</span>
-                              <span className="time">{formatTime(getReady)}</span>
-                            </div>
-                            <div className="trigger-step">
-                              <span>🔔 Aviso de Saída (15m antes):</span>
-                              <span className="time">{formatTime(parseDateSafe(calc.warnLeaveTime) || departure)}</span>
-                            </div>
-                            <div className="trigger-step" style={{ fontWeight: 'bold', color: 'var(--success)' }}>
-                              <span>🚗 Horário de Saída:</span>
-                              <span className="time">{formatTime(departure)}</span>
-                            </div>
-                          </div>
-
-                          {/* Graphical Segmented Timeline Bar */}
-                          <div style={{ paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Clock size={11} /> LINHA DO TEMPO VISUAL
-                            </div>
-
-                            {/* Bar segment container */}
-                            <div style={{ position: 'relative', display: 'flex', height: '12px', borderRadius: '3px', overflow: 'hidden', background: 'rgba(255,255,255,0.05)', marginBottom: '4px' }}>
-                              {prepPct > 0 && (
-                                <div style={{ width: `${prepPct}%`, backgroundColor: 'hsl(280, 65%, 60%)' }} title={`Se arrumar: ${prepDur} min`} />
-                              )}
-                              {transitPct > 0 && (
-                                <div style={{ width: `${transitPct}%`, backgroundColor: 'hsl(38, 90%, 55%)' }} title={`Deslocamento: ${transitDur} min`} />
-                              )}
-                              {apptPct > 0 && (
-                                <div style={{ width: `${apptPct}%`, backgroundColor: eventColor }} title={`Compromisso: ${apptDur} min`} />
-                              )}
-
-                              {/* Current time indicator line */}
-                              {isNowInEvent && (
-                                <div 
-                                  style={{
-                                    position: 'absolute',
-                                    left: `${nowEventPct}%`,
-                                    top: 0,
-                                    bottom: 0,
-                                    width: '2px',
-                                    backgroundColor: '#ef4444',
-                                    boxShadow: '0 0 6px rgba(239, 68, 68, 0.9)',
-                                    zIndex: 5,
-                                    pointerEvents: 'none'
-                                  }}
-                                  title={`Agora: ${formatTime(now)}`}
-                                />
-                              )}
-                            </div>
-
-                            {/* Timeline hours ticks scale */}
-                            <div style={{ position: 'relative', height: '16px', fontSize: '9px', color: 'var(--text-secondary)', fontWeight: '500', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                              {prepPct > 0 && (
-                                <span style={{ position: 'absolute', left: '0%', transform: 'translateX(0%)' }}>
-                                  {formatTime(getReady)}
-                                </span>
-                              )}
-                              <span style={{ position: 'absolute', left: `${posB}%`, transform: 'translateX(-50%)' }}>
-                                {formatTime(departure)}
-                              </span>
-                              <span style={{ position: 'absolute', left: `${posC}%`, transform: 'translateX(-50%)' }}>
-                                {formatTime(evStart)}
-                              </span>
-                              <span style={{ position: 'absolute', right: '0%', transform: 'translateX(0%)' }}>
-                                {formatTime(evEnd)}
-                              </span>
-                            </div>
-
-                            {/* Phase labels */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px' }}>
-                              {prepPct > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'hsl(280, 65%, 60%)' }} />
-                                    <span style={{ color: 'var(--text-secondary)' }}>Se Arrumar</span>
-                                  </div>
-                                  <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(getReady)} - {formatTime(departure)} ({prepDur}m)</span>
-                                </div>
-                              )}
-                              {transitPct > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'hsl(38, 90%, 55%)' }} />
-                                    <span style={{ color: 'var(--text-secondary)' }}>Deslocamento</span>
-                                  </div>
-                                  <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(departure)} - {formatTime(evStart)} ({transitDur}m)</span>
-                                </div>
-                              )}
-                              {apptPct > 0 && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: eventColor }} />
-                                    <span style={{ color: 'var(--text-secondary)' }}>Compromisso</span>
-                                  </div>
-                                  <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(evStart)} - {formatTime(evEnd)} ({apptDur}m)</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                        </div>
-                      );
-                    })()}
-
-                    {(() => {
-                      const arrivalMatch = calc.description?.match(/\[actual_arrival:([^\]]+)\]/);
-                      const departureMatch = calc.description?.match(/\[actual_departure:([^\]]+)\]/);
-                      const actualArrival = arrivalMatch ? new Date(arrivalMatch[1]) : null;
-                      const actualDeparture = departureMatch ? new Date(departureMatch[1]) : null;
-
-                      if (!actualArrival && !actualDeparture) return null;
-
-                      return (
-                        <div style={{
-                          marginTop: '12px',
-                          padding: '10px',
-                          background: 'rgba(79, 70, 229, 0.05)',
-                          border: '1px dashed rgba(79, 70, 229, 0.2)',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '6px'
-                        }}>
-                          {actualArrival && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--success)' }}>
-                              <span>📥 Chegada registrada:</span>
-                              <strong>{actualArrival.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</strong>
-                            </div>
-                          )}
-                          {actualDeparture && (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-hover)' }}>
-                              <span>📤 Saída registrada:</span>
-                              <strong>{actualDeparture.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</strong>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    {!calc.location && (
-                      <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.01)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                        <Navigation size={12} style={{ flexShrink: 0, marginTop: '2px' }} />
-                        <span>Sem local cadastrado. Alertas de partida proativos estão desativados para este evento.</span>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
+            {/* Sub-abas de Visualização da Agenda */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+              <button 
+                type="button"
+                className={`btn-subtab ${agendaSubTab === 'dia' ? 'active' : ''}`}
+                onClick={() => { setAgendaSubTab('dia'); setSelectedDate(new Date()); }}
+                style={{
+                  background: agendaSubTab === 'dia' ? 'rgba(79, 70, 229, 0.15)' : 'transparent',
+                  border: 'none',
+                  color: agendaSubTab === 'dia' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: agendaSubTab === 'dia' ? '600' : 'normal',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Dia
+              </button>
+              <button 
+                type="button"
+                className={`btn-subtab ${agendaSubTab === 'semana' ? 'active' : ''}`}
+                onClick={() => { setAgendaSubTab('semana'); setSelectedDate(new Date()); }}
+                style={{
+                  background: agendaSubTab === 'semana' ? 'rgba(79, 70, 229, 0.15)' : 'transparent',
+                  border: 'none',
+                  color: agendaSubTab === 'semana' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: agendaSubTab === 'semana' ? '600' : 'normal',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Semana
+              </button>
+              <button 
+                type="button"
+                className={`btn-subtab ${agendaSubTab === 'mes' ? 'active' : ''}`}
+                onClick={() => { setAgendaSubTab('mes'); setSelectedDate(new Date()); }}
+                style={{
+                  background: agendaSubTab === 'mes' ? 'rgba(79, 70, 229, 0.15)' : 'transparent',
+                  border: 'none',
+                  color: agendaSubTab === 'mes' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: agendaSubTab === 'mes' ? '600' : 'normal',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                Mês
+              </button>
             </div>
+
+            {agendaSubTab === 'dia' && (
+              <>
+                {calculations.length > 0 && (() => {
+                  const now = currentTime;
+                  const dayEvents = calculations.map((calc, idx) => {
+                    const evStart = parseDateSafe(calc.eventStart);
+                    if (!evStart) return null;
+                    const evEnd = parseDateSafe(calc.eventEnd) || new Date(evStart.getTime() + 60 * 60 * 1000);
+                    const departure = parseDateSafe(calc.departureTime) || evStart;
+
+                    // Hide prep time if already in transit or arrived
+                    const isPastDeparture = now.getTime() > departure.getTime();
+                    const hasArrived = calc.description?.includes('[actual_arrival:') || now.getTime() > evStart.getTime();
+                    const hidePrep = isPastDeparture || hasArrived;
+
+                    const getReady = hidePrep ? departure : (parseDateSafe(calc.getReadyTime) || evStart);
+
+                    return {
+                      ...calc,
+                      evStart,
+                      evEnd,
+                      getReady,
+                      departure,
+                      eventColor: getEventColor(calc.eventId, idx)
+                    };
+                  }).filter(Boolean);
+
+                  if (dayEvents.length === 0) return null;
+
+                  // Calculate min and max times of the occupied schedule
+                  const minTimeMs = Math.min(...dayEvents.map(e => e.getReady.getTime()));
+                  const maxTimeMs = Math.max(...dayEvents.map(e => e.evEnd.getTime()));
+                  const totalDurationMs = maxTimeMs - minTimeMs;
+
+                  const nowMs = now.getTime();
+                  const showNowIndicator = nowMs >= minTimeMs && nowMs <= maxTimeMs;
+                  const nowPct = showNowIndicator ? ((nowMs - minTimeMs) / totalDurationMs) * 100 : 0;
+
+                  const getPctCropped = (date) => {
+                    if (!date) return 0;
+                    const timeMs = date.getTime();
+                    if (totalDurationMs <= 0) return 0;
+                    return ((timeMs - minTimeMs) / totalDurationMs) * 100;
+                  };
+
+                  // Collect transition ticks for the timeline scale
+                  const ticks = [];
+                  dayEvents.forEach((event) => {
+                    ticks.push({ time: event.getReady, pct: getPctCropped(event.getReady) });
+                    ticks.push({ time: event.departure, pct: getPctCropped(event.departure) });
+                    ticks.push({ time: event.evStart, pct: getPctCropped(event.evStart) });
+                    ticks.push({ time: event.evEnd, pct: getPctCropped(event.evEnd) });
+                  });
+
+                  // Sort and remove duplicate ticks (within 1 minute) to prevent text overlapping
+                  const uniqueTicks = [];
+                  ticks.sort((a, b) => a.time.getTime() - b.time.getTime());
+                  ticks.forEach((tick) => {
+                    if (!uniqueTicks.some(t => Math.abs(t.time.getTime() - tick.time.getTime()) < 60 * 1000)) {
+                      uniqueTicks.push(tick);
+                    }
+                  });
+
+                  const upcomingDepartures = dayEvents.filter(e => {
+                    const timeDiffMs = e.departure.getTime() - now.getTime();
+                    return timeDiffMs > 0 && timeDiffMs <= 60 * 60 * 1000;
+                  });
+
+                  return (
+                    <div className="card glass animate-fade-in" style={{ padding: '20px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <h3 style={{ fontSize: '15px', margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Clock size={16} /> Visualização Diária (Horários Ocupados)
+                      </h3>
+                      
+                      {upcomingDepartures.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {upcomingDepartures.map(e => (
+                            <div key={e.eventId} className="alert alert-warning animate-pulse" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', fontSize: '12px' }}>
+                              <AlertTriangle size={14} />
+                              <span>Atenção! Você precisa sair para <strong>{e.summary}</strong> em {Math.round((e.departure.getTime() - now.getTime()) / (60 * 1000))} minutos.</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Main occupied timeline */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {/* Timeline Header label */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                          <span>Início do Dia</span>
+                          <span>Fim dos Compromissos</span>
+                        </div>
+
+                        {/* Visual timeline bar */}
+                        <div style={{ position: 'relative', height: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                          {/* occupied events segments */}
+                          {dayEvents.map((event) => {
+                            const left = getPctCropped(event.getReady);
+                            const width = getPctCropped(event.evEnd) - left;
+                            return (
+                              <div 
+                                key={event.eventId} 
+                                style={{
+                                  position: 'absolute',
+                                  left: `${left}%`,
+                                  width: `${width}%`,
+                                  top: 0,
+                                  bottom: 0,
+                                  background: event.eventColor,
+                                  opacity: 0.85,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => {
+                                  // Scroll to specific card
+                                  const el = document.querySelector(`[data-event-id="${event.eventId}"]`);
+                                  if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    el.classList.add('highlight-flash');
+                                    setTimeout(() => el.classList.remove('highlight-flash'), 1500);
+                                  }
+                                }}
+                                title={`${event.summary} (${formatTime(event.getReady)} - ${formatTime(event.evEnd)})`}
+                              />
+                            );
+                          })}
+
+                          {/* Current time indicator line */}
+                          {showNowIndicator && (
+                            <div 
+                              style={{
+                                position: 'absolute',
+                                left: `${nowPct}%`,
+                                top: 0,
+                                bottom: 0,
+                                width: '2px',
+                                backgroundColor: '#ef4444',
+                                boxShadow: '0 0 6px rgba(239, 68, 68, 0.9)',
+                                zIndex: 10
+                              }}
+                              title={`Agora: ${formatTime(now)}`}
+                            />
+                          )}
+                        </div>
+
+                        {/* Timeline scales ticks */}
+                        <div style={{ position: 'relative', height: '16px', fontSize: '8px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                          {uniqueTicks.map((tick, idx) => (
+                            <span 
+                              key={idx} 
+                              style={{
+                                position: 'absolute',
+                                left: `${tick.pct}%`,
+                                transform: tick.pct > 90 ? 'translateX(-100%)' : tick.pct < 10 ? 'translateX(0%)' : 'translateX(-50%)',
+                                whiteSpace: 'nowrap',
+                                fontWeight: '600'
+                              }}
+                            >
+                              {formatTime(tick.time)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div 
+                  ref={appointmentsContainerRef}
+                  className="timeline-grid animate-fade-in"
+                  style={{
+                    maxHeight: '520px',
+                    overflowY: 'auto',
+                    paddingRight: '6px',
+                    scrollBehavior: 'smooth'
+                  }}
+                >
+                  {calculations.length === 0 ? (
+                    <div className="card glass" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px', gap: '12px', color: 'var(--text-secondary)', borderStyle: 'dashed' }}>
+                      <Calendar size={36} />
+                      <span>Nenhum compromisso agendado para as próximas 12 horas.</span>
+                      <span style={{ fontSize: '12px' }}>Use {isMobile ? 'a aba Conversa' : 'o chat assistente ao lado'} para agendar novos eventos!</span>
+                    </div>
+                  ) : (
+                    calculations.map((calc, idx) => (
+                      <div 
+                        key={calc.eventId} 
+                        data-event-id={calc.eventId}
+                        className="card event-card has-triggers glass"
+                        style={{ borderLeft: `4px solid ${getEventColor(calc.eventId, idx)}` }}
+                      >
+                        <div className="event-header">
+                          <span className="event-time">
+                            {(() => { const d = formatDate(calc.eventStart); return d.charAt(0).toUpperCase() + d.slice(1); })()} {formatTime(calc.eventStart)} - {formatTime(calc.eventEnd || new Date(new Date(calc.eventStart).getTime() + 60 * 60 * 1000))}
+                          </span>
+                          <button className="btn btn-secondary" style={{ padding: '4px', border: 'none', background: 'transparent' }} onClick={() => handleDeleteEvent(calc.eventId)}>
+                            <Trash2 size={15} style={{ color: 'var(--danger)' }} />
+                          </button>
+                        </div>
+                        
+                        <div className="event-title">{calc.summary}</div>
+                        
+                        {calc.location && (
+                          <div className="event-location">
+                            <MapPin size={14} style={{ color: 'var(--accent-hover)' }} />
+                            <a 
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(calc.location)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: 'var(--accent-hover)', textDecoration: 'underline', fontWeight: '500', cursor: 'pointer' }}
+                            >
+                              {calc.location}
+                            </a>
+                          </div>
+                        )}
+
+                        {calc.location && calc.travelData && (() => {
+                          const now = currentTime;
+                          const evStart = parseDateSafe(calc.eventStart);
+                          if (!evStart) return null;
+
+                          const evEnd = parseDateSafe(calc.eventEnd) || new Date(evStart.getTime() + 60 * 60 * 1000);
+                          const departure = parseDateSafe(calc.departureTime) || evStart;
+
+                          // Hide prep time if already in transit or arrived
+                          const isPastDeparture = now.getTime() > departure.getTime();
+                          const hasArrived = calc.description?.includes('[actual_arrival:') || now.getTime() > evStart.getTime();
+                          const hidePrep = isPastDeparture || hasArrived;
+
+                          const getReady = hidePrep ? departure : (parseDateSafe(calc.getReadyTime) || evStart);
+
+                          const prepDur = Math.max(0, Math.round((departure.getTime() - getReady.getTime()) / (60 * 1000)));
+                          const transitDur = Math.max(0, Math.round((evStart.getTime() - departure.getTime()) / (60 * 1000)));
+                          const apptDur = Math.max(0, Math.round((evEnd.getTime() - evStart.getTime()) / (60 * 1000)));
+                          
+                          const totalMinutes = prepDur + transitDur + apptDur;
+                          const prepPct = totalMinutes > 0 ? (prepDur / totalMinutes) * 100 : 0;
+                          const transitPct = totalMinutes > 0 ? (transitDur / totalMinutes) * 100 : 0;
+                          const apptPct = totalMinutes > 0 ? (apptDur / totalMinutes) * 100 : 0;
+                          
+                          const eventStartMs = getReady.getTime();
+                          const eventEndMs = evEnd.getTime();
+                          const eventDurationMs = eventEndMs - eventStartMs;
+                          const isNowInEvent = now.getTime() >= eventStartMs && now.getTime() <= eventEndMs;
+                          const nowEventPct = isNowInEvent && eventDurationMs > 0 
+                            ? ((now.getTime() - eventStartMs) / eventDurationMs) * 100 
+                            : 0;
+                          
+                          const posB = prepPct;
+                          const posC = prepPct + transitPct;
+                          
+                          const eventColor = getEventColor(calc.eventId, idx);
+
+                          return (
+                            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              
+                              {/* Triggers indicator list */}
+                              <div className="trigger-indicator" style={{ marginBottom: '4px' }}>
+                                <div className="trigger-step" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', paddingBottom: '4px', marginBottom: '4px' }}>
+                                  <span style={{ color: 'var(--text-secondary)' }}>Trânsito ({calc.travelData.distanceText}):</span>
+                                  <span className="time" style={{ color: 'var(--accent-hover)' }}>{calc.travelData.durationText}</span>
+                                </div>
+                                <div className="trigger-step">
+                                  <span>👔 Se Arrume (1h antes):</span>
+                                  <span className="time">{formatTime(getReady)}</span>
+                                </div>
+                              </div>
+
+                              {/* Progress bar timeline of the event */}
+                              <div style={{ position: 'relative', height: '14px', background: 'rgba(255,255,255,0.03)', borderRadius: '7px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                                {prepPct > 0 && (
+                                  <div 
+                                    style={{
+                                      position: 'absolute',
+                                      left: '0%',
+                                      width: `${prepPct}%`,
+                                      top: 0,
+                                      bottom: 0,
+                                      backgroundColor: 'hsl(280, 65%, 60%)',
+                                      opacity: 0.6
+                                    }}
+                                    title={`Se Arrumar: ${formatTime(getReady)} - ${formatTime(departure)}`}
+                                  />
+                                )}
+                                {transitPct > 0 && (
+                                  <div 
+                                    style={{
+                                      position: 'absolute',
+                                      left: `${posB}%`,
+                                      width: `${transitPct}%`,
+                                      top: 0,
+                                      bottom: 0,
+                                      backgroundColor: 'hsl(38, 90%, 55%)',
+                                      opacity: 0.7
+                                    }}
+                                    title={`Deslocamento: ${formatTime(departure)} - ${formatTime(evStart)}`}
+                                  />
+                                )}
+                                {apptPct > 0 && (
+                                  <div 
+                                    style={{
+                                      position: 'absolute',
+                                      left: `${posC}%`,
+                                      width: `${apptPct}%`,
+                                      top: 0,
+                                      bottom: 0,
+                                      backgroundColor: eventColor,
+                                      opacity: 0.8
+                                    }}
+                                    title={`Compromisso: ${formatTime(evStart)} - ${formatTime(evEnd)}`}
+                                  />
+                                )}
+                                {isNowInEvent && (
+                                  <div 
+                                    style={{
+                                      position: 'absolute',
+                                      left: `${nowEventPct}%`,
+                                      top: 0,
+                                      bottom: 0,
+                                      width: '2px',
+                                      backgroundColor: '#ef4444',
+                                      boxShadow: '0 0 6px rgba(239, 68, 68, 0.9)',
+                                      zIndex: 5,
+                                      pointerEvents: 'none'
+                                    }}
+                                    title={`Agora: ${formatTime(now)}`}
+                                  />
+                                )}
+                              </div>
+
+                              {/* Timeline hours ticks scale */}
+                              <div style={{ position: 'relative', height: '16px', fontSize: '9px', color: 'var(--text-secondary)', fontWeight: '500', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                {prepPct > 0 && (
+                                  <span style={{ position: 'absolute', left: '0%', transform: 'translateX(0%)' }}>
+                                    {formatTime(getReady)}
+                                  </span>
+                                )}
+                                <span style={{ position: 'absolute', left: `${posB}%`, transform: 'translateX(-50%)' }}>
+                                  {formatTime(departure)}
+                                </span>
+                                <span style={{ position: 'absolute', left: `${posC}%`, transform: 'translateX(-50%)' }}>
+                                  {formatTime(evStart)}
+                                </span>
+                                <span style={{ position: 'absolute', right: '0%', transform: 'translateX(0%)' }}>
+                                  {formatTime(evEnd)}
+                                </span>
+                              </div>
+
+                              {/* Phase labels */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px' }}>
+                                {prepPct > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'hsl(280, 65%, 60%)' }} />
+                                      <span style={{ color: 'var(--text-secondary)' }}>Se Arrumar</span>
+                                    </div>
+                                    <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(getReady)} - {formatTime(departure)} ({prepDur}m)</span>
+                                  </div>
+                                )}
+                                {transitPct > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'hsl(38, 90%, 55%)' }} />
+                                      <span style={{ color: 'var(--text-secondary)' }}>Deslocamento</span>
+                                    </div>
+                                    <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(departure)} - {formatTime(evStart)} ({transitDur}m)</span>
+                                  </div>
+                                )}
+                                {apptPct > 0 && (
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: eventColor }} />
+                                      <span style={{ color: 'var(--text-secondary)' }}>Compromisso</span>
+                                    </div>
+                                    <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{formatTime(evStart)} - {formatTime(evEnd)} ({apptDur}m)</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {(() => {
+                          const arrivalMatch = calc.description?.match(/\[actual_arrival:([^\]]+)\]/);
+                          const departureMatch = calc.description?.match(/\[actual_departure:([^\]]+)\]/);
+                          const actualArrival = arrivalMatch ? new Date(arrivalMatch[1]) : null;
+                          const actualDeparture = departureMatch ? new Date(departureMatch[1]) : null;
+
+                          if (!actualArrival && !actualDeparture) return null;
+
+                          return (
+                            <div style={{
+                              marginTop: '12px',
+                              padding: '10px',
+                              background: 'rgba(79, 70, 229, 0.05)',
+                              border: '1px dashed rgba(79, 70, 229, 0.2)',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}>
+                              {actualArrival && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--success)' }}>
+                                  <span>📥 Chegada registrada:</span>
+                                  <strong>{actualArrival.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</strong>
+                                </div>
+                              )}
+                              {actualDeparture && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-hover)' }}>
+                                  <span>📤 Saída registrada:</span>
+                                  <strong>{actualDeparture.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</strong>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {!calc.location && (
+                          <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.01)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                            <Navigation size={12} style={{ flexShrink: 0, marginTop: '2px' }} />
+                            <span>Sem local cadastrado. Alertas de partida proativos estão desativados para este evento.</span>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+
+            {agendaSubTab === 'semana' && (() => {
+              const startOfWeek = new Date(selectedDate);
+              const dayOfWeek = startOfWeek.getDay();
+              startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek); // Go to Sunday
+              
+              const weekDays = [];
+              for (let i = 0; i < 7; i++) {
+                const d = new Date(startOfWeek);
+                d.setDate(startOfWeek.getDate() + i);
+                weekDays.push(d);
+              }
+
+              const navigateWeek = (direction) => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(selectedDate.getDate() + direction * 7);
+                setSelectedDate(newDate);
+              };
+
+              const startFormatted = startOfWeek.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+              const endOfWeek = new Date(startOfWeek);
+              endOfWeek.setDate(startOfWeek.getDate() + 6);
+              const endFormatted = endOfWeek.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+              const getEventsForDate = (date, calcs) => {
+                const targetStr = date.toDateString();
+                return calcs.filter(calc => {
+                  const d = parseDateSafe(calc.eventStart);
+                  return d && d.toDateString() === targetStr;
+                });
+              };
+
+              return (
+                <div className="card glass animate-fade-in" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '520px', overflowY: 'auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+                    <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => navigateWeek(-1)}>
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                      Semana: {startFormatted} a {endFormatted}
+                    </span>
+                    <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => navigateWeek(1)}>
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+
+                  {isLoadingRange ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+                      <RefreshCw className="spin-anim" size={24} style={{ color: 'var(--accent-primary)' }} />
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {weekDays.map((day) => {
+                        const dayEvents = getEventsForDate(day, rangeCalculations);
+                        const isToday = day.toDateString() === new Date().toDateString();
+                        return (
+                          <div 
+                            key={day.toDateString()} 
+                            style={{ 
+                              padding: '10px', 
+                              borderRadius: '8px', 
+                              background: isToday ? 'rgba(79, 70, 229, 0.08)' : 'rgba(255,255,255,0.02)',
+                              border: isToday ? '1px solid var(--accent-hover)' : '1px solid var(--border-color)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed var(--border-color)', paddingBottom: '4px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: isToday ? 'var(--accent-hover)' : 'var(--text-primary)' }}>
+                                {DAY_NAMES[day.getDay()]}
+                              </span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                                {day.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
+                              </span>
+                            </div>
+
+                            {dayEvents.length === 0 ? (
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', padding: '4px 0' }}>
+                                Nenhum compromisso
+                              </span>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {dayEvents.map((ev, idx) => {
+                                  const evStart = parseDateSafe(ev.eventStart);
+                                  const evEnd = parseDateSafe(ev.eventEnd);
+                                  const timeStr = evStart ? `${evStart.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})} - ${evEnd ? evEnd.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}) : ''}` : '';
+                                  return (
+                                    <div 
+                                      key={ev.eventId + '-' + idx} 
+                                      style={{ 
+                                        padding: '6px 8px', 
+                                        borderRadius: '6px', 
+                                        background: getEventColor(ev.eventId, idx),
+                                        color: '#fff',
+                                        fontSize: '12px'
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600' }}>
+                                        <span>{ev.summary || 'Sem Título'}</span>
+                                        <span style={{ opacity: 0.9, fontSize: '10px' }}>{timeStr}</span>
+                                      </div>
+                                      {ev.location && (
+                                        <div style={{ fontSize: '10px', marginTop: '2px', opacity: 0.9, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                          <MapPin size={10} /> {ev.location}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {agendaSubTab === 'mes' && (() => {
+              const year = selectedDate.getFullYear();
+              const month = selectedDate.getMonth();
+              
+              const firstDay = new Date(year, month, 1);
+              const startDayIndex = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+              const totalDays = new Date(year, month + 1, 0).getDate();
+              
+              const gridCells = [];
+              // Add padding days from the previous month
+              const prevMonthTotalDays = new Date(year, month, 0).getDate();
+              for (let i = startDayIndex - 1; i >= 0; i--) {
+                const d = new Date(year, month - 1, prevMonthTotalDays - i);
+                gridCells.push({ date: d, currentMonth: false });
+              }
+              
+              // Add days of current month
+              for (let i = 1; i <= totalDays; i++) {
+                const d = new Date(year, month, i);
+                gridCells.push({ date: d, currentMonth: true });
+              }
+              
+              // Add padding days from the next month to fill grid
+              const maxCells = gridCells.length <= 35 ? 35 : 42;
+              const nextMonthPadding = maxCells - gridCells.length;
+              for (let i = 1; i <= nextMonthPadding; i++) {
+                const d = new Date(year, month + 1, i);
+                gridCells.push({ date: d, currentMonth: false });
+              }
+
+              const navigateMonth = (direction) => {
+                const newDate = new Date(selectedDate);
+                newDate.setMonth(selectedDate.getMonth() + direction);
+                setSelectedDate(newDate);
+              };
+
+              const getEventsForDate = (date, calcs) => {
+                const targetStr = date.toDateString();
+                return calcs.filter(calc => {
+                  const d = parseDateSafe(calc.eventStart);
+                  return d && d.toDateString() === targetStr;
+                });
+              };
+
+              const selectedDayEvents = getEventsForDate(selectedDayInMonth, rangeCalculations);
+
+              return (
+                <div className="card glass animate-fade-in" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '520px', overflowY: 'auto' }}>
+                  {/* Month Navigation Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+                    <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => navigateMonth(-1)}>
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                      {MONTH_NAMES[month]} de {year}
+                    </span>
+                    <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => navigateMonth(1)}>
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+
+                  {isLoadingRange ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+                      <RefreshCw className="spin-anim" size={24} style={{ color: 'var(--accent-primary)' }} />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Calendar Grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+                        {/* Weekday Headers */}
+                        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, idx) => (
+                          <span key={idx} style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-secondary)', paddingBottom: '4px' }}>
+                            {day}
+                          </span>
+                        ))}
+
+                        {/* Grid Cells */}
+                        {gridCells.map(({ date, currentMonth }) => {
+                          const dayEvents = getEventsForDate(date, rangeCalculations);
+                          const isSelected = date.toDateString() === selectedDayInMonth.toDateString();
+                          const isToday = date.toDateString() === new Date().toDateString();
+
+                          return (
+                            <div
+                              key={date.toDateString()}
+                              onClick={() => setSelectedDayInMonth(date)}
+                              style={{
+                                aspectRatio: '1',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                background: isSelected 
+                                  ? 'var(--accent-primary)' 
+                                  : isToday 
+                                    ? 'rgba(79, 70, 229, 0.15)' 
+                                    : currentMonth 
+                                      ? 'rgba(255,255,255,0.03)' 
+                                      : 'rgba(255,255,255,0.01)',
+                                border: isSelected 
+                                  ? '1px solid var(--accent-hover)' 
+                                  : isToday 
+                                    ? '1px solid var(--accent-hover)' 
+                                    : '1px solid var(--border-color)',
+                                opacity: currentMonth ? 1 : 0.4,
+                                position: 'relative',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <span style={{ 
+                                fontSize: '11px', 
+                                fontWeight: (isToday || isSelected) ? '700' : 'normal',
+                                color: isSelected ? '#fff' : isToday ? 'var(--accent-hover)' : 'var(--text-primary)'
+                              }}>
+                                {date.getDate()}
+                              </span>
+                              
+                              {/* Event Dots */}
+                              {dayEvents.length > 0 && (
+                                <div style={{ 
+                                  display: 'flex', 
+                                  gap: '2px', 
+                                  position: 'absolute', 
+                                  bottom: '3px',
+                                  justifyContent: 'center',
+                                  width: '100%'
+                                }}>
+                                  {dayEvents.slice(0, 3).map((ev, idx) => (
+                                    <span 
+                                      key={ev.eventId + '-' + idx}
+                                      style={{
+                                        width: '3px',
+                                        height: '3px',
+                                        borderRadius: '50%',
+                                        background: isSelected ? '#fff' : getEventColor(ev.eventId, idx)
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Selected Day Events List */}
+                      <div style={{ marginTop: '6px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+                        <h4 style={{ fontSize: '12px', margin: '0 0 6px 0', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Calendar size={12} /> 
+                          {selectedDayInMonth.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}:
+                        </h4>
+
+                        {selectedDayEvents.length === 0 ? (
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                            Nenhum compromisso para este dia.
+                          </span>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {selectedDayEvents.map((ev, idx) => {
+                              const evStart = parseDateSafe(ev.eventStart);
+                              const evEnd = parseDateSafe(ev.eventEnd);
+                              const timeStr = evStart ? `${evStart.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})} - ${evEnd ? evEnd.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'}) : ''}` : '';
+                              return (
+                                <div 
+                                  key={ev.eventId + '-' + idx}
+                                  style={{
+                                    padding: '8px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(255,255,255,0.02)',
+                                    border: '1px solid var(--border-color)',
+                                    borderLeft: `3px solid ${getEventColor(ev.eventId, idx)}`,
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', color: 'var(--text-primary)' }}>
+                                    <span>{ev.summary || 'Sem Título'}</span>
+                                    <span style={{ color: 'var(--accent-hover)', fontSize: '10px' }}>{timeStr}</span>
+                                  </div>
+                                  {ev.location && (
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                      <MapPin size={10} /> {ev.location}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </>
         ) : activeSecondTab === 'water' ? (
           <WaterTracker />

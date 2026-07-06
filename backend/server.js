@@ -558,40 +558,45 @@ app.get('/api/calendar/calculate', async (req, res) => {
     const userPreferences = getPreferences();
     const tz = userPreferences.userTimezone || 'America/Sao_Paulo';
     
-    // Get start and end of today in the user's local timezone
-    const dtf = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-    const [{ value: mo }, , { value: da }, , { value: ye }] = dtf.formatToParts(new Date());
-    const dateStr = `${ye}-${mo}-${da}`;
-    
-    // Get the timezone offset for the current time
-    const dtfOffset = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      timeZoneName: 'longOffset'
-    });
-    const parts = dtfOffset.formatToParts(new Date());
-    const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value;
-    
-    let offset = '+00:00';
-    if (offsetPart && offsetPart.startsWith('GMT')) {
-      const clean = offsetPart.substring(3);
-      if (clean) {
-        if (clean.includes(':')) {
-          offset = clean;
-        } else {
-          const sign = clean.charAt(0);
-          const val = clean.substring(1);
-          offset = `${sign}${val.padStart(2, '0')}:00`;
+    let timeMin = req.query.timeMin;
+    let timeMax = req.query.timeMax;
+
+    if (!timeMin || !timeMax) {
+      // Get start and end of today in the user's local timezone
+      const dtf = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const [{ value: mo }, , { value: da }, , { value: ye }] = dtf.formatToParts(new Date());
+      const dateStr = `${ye}-${mo}-${da}`;
+      
+      // Get the timezone offset for the current time
+      const dtfOffset = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        timeZoneName: 'longOffset'
+      });
+      const parts = dtfOffset.formatToParts(new Date());
+      const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value;
+      
+      let offset = '+00:00';
+      if (offsetPart && offsetPart.startsWith('GMT')) {
+        const clean = offsetPart.substring(3);
+        if (clean) {
+          if (clean.includes(':')) {
+            offset = clean;
+          } else {
+            const sign = clean.charAt(0);
+            const val = clean.substring(1);
+            offset = `${sign}${val.padStart(2, '0')}:00`;
+          }
         }
       }
+      
+      timeMin = new Date(`${dateStr}T00:00:00${offset}`).toISOString();
+      timeMax = new Date(`${dateStr}T23:59:59${offset}`).toISOString();
     }
-    
-    const timeMin = new Date(`${dateStr}T00:00:00${offset}`).toISOString();
-    const timeMax = new Date(`${dateStr}T23:59:59${offset}`).toISOString();
 
     const events = await listEvents(timeMin, timeMax);
     const calculations = [];
