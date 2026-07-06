@@ -3484,7 +3484,7 @@ function App() {
                   <button
                     type="button"
                     className="btn btn-danger-solid"
-                    onClick={() => handleConfirmAction('Cancelar', index)}
+                    onClick={() => handleConfirmAction('Não', index)}
                     style={{
                       padding: '6px 14px',
                       fontSize: '12px',
@@ -3493,7 +3493,7 @@ function App() {
                       cursor: 'pointer'
                     }}
                   >
-                    ✕ CANCELAR
+                    ✕ NÃO
                   </button>
                 </div>
               )}
