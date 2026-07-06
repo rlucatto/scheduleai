@@ -1975,8 +1975,11 @@ function App() {
     if (msg.actionConfirmed) return false;
     if (msg.needsConfirmation) return true;
 
-    const text = (msg.text || '').toLowerCase();
-    const isQuestion = text.includes('?');
+    // Strip markdown link targets (e.g. ](url)) and standalone HTTP URLs to prevent query parameters (like ?api=1) from triggering question heuristics
+    const textForCheck = (msg.text || '').toLowerCase()
+      .replace(/\]\([^)]+\)/g, ']')
+      .replace(/https?:\/\/[^\s]+/g, '');
+    const isQuestion = textForCheck.includes('?');
     if (!isQuestion) return false;
 
     // Exclude open-ended questions
