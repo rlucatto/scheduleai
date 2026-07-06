@@ -32,6 +32,15 @@ const defaultPreferences = {
 
 let userPreferences = { ...defaultPreferences };
 
+const formatTimeWithTimezone = (date) => {
+  const tz = userPreferences.userTimezone || 'America/Sao_Paulo';
+  return date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: tz
+  });
+};
+
 // Load persisted preferences
 // Load persisted preferences
 const loadPreferences = async () => {
@@ -241,7 +250,7 @@ const checkUpcomingEvents = async () => {
                   sendNotification('schedule-update', {
                     eventId: event.id,
                     summary: event.summary,
-                    message: `Ajuste de agenda: O compromisso flexível "${event.summary}" foi remarcado para às ${expectedStart.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})} para acompanhar o término de "${parentEvent.summary}" mais o trânsito (trânsito estimado: ${travelData.durationText}).`,
+                    message: `Ajuste de agenda: O compromisso flexível "${event.summary}" foi remarcado para às ${formatTimeWithTimezone(expectedStart)} para acompanhar o término de "${parentEvent.summary}" mais o trânsito (trânsito estimado: ${travelData.durationText}).`,
                     eventTime: expectedStart,
                     departureTime: parentEnd
                   });
@@ -299,7 +308,7 @@ const checkUpcomingEvents = async () => {
 
         if (!state) {
           // 1. INITIAL CHECK (1 hour before departure or first check in the window)
-          console.log(`[SCHEDULER] Initial traffic check for event "${summary}". Departure time: ${departureTime.toLocaleTimeString('pt-BR')}`);
+          console.log(`[SCHEDULER] Initial traffic check for event "${summary}". Departure time: ${formatTimeWithTimezone(departureTime)}`);
           
           state = {
             lastTrafficCheckTime: now,
@@ -314,7 +323,7 @@ const checkUpcomingEvents = async () => {
             sendNotification('get-ready', {
               eventId,
               summary,
-              message: `Hora de se arrumar! Seu compromisso "${summary}" é às ${triggers.eventStart.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}. Você precisará sair às ${departureTime.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})} (trânsito estimado: ${travelData.durationText}).`,
+              message: `Hora de se arrumar! Seu compromisso "${summary}" é às ${formatTimeWithTimezone(triggers.eventStart)}. Você precisará sair às ${formatTimeWithTimezone(departureTime)} (trânsito estimado: ${travelData.durationText}).`,
               eventTime: triggers.eventStart,
               departureTime
             });
@@ -335,9 +344,8 @@ const checkUpcomingEvents = async () => {
               if (diffMinutes > 5) {
                 console.log(`[SCHEDULER] Alert: Departure time changed by ${diffMinutes.toFixed(1)} minutes (threshold 5m)`);
                 
-                const timeFormatter = { hour: '2-digit', minute: '2-digit' };
-                const oldTimeStr = state.lastNotifiedDepartureTime.toLocaleTimeString('pt-BR', timeFormatter);
-                const newTimeStr = newDepartureTime.toLocaleTimeString('pt-BR', timeFormatter);
+                const oldTimeStr = formatTimeWithTimezone(state.lastNotifiedDepartureTime);
+                const newTimeStr = formatTimeWithTimezone(newDepartureTime);
 
                 sendNotification('traffic-update', {
                   eventId,
@@ -626,7 +634,7 @@ export const checkLocationArrivalDeparture = async (latitude, longitude) => {
           sendNotification('arrival', {
             eventId: event.id,
             summary: event.summary,
-            message: `Chegada registrada! Você chegou ao compromisso "${event.summary}" às ${now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}.`,
+            message: `Chegada registrada! Você chegou ao compromisso "${event.summary}" às ${formatTimeWithTimezone(now)}.`,
             eventTime: new Date(event.start?.dateTime || event.start?.date),
             arrivalTime: now
           });
@@ -654,7 +662,7 @@ export const checkLocationArrivalDeparture = async (latitude, longitude) => {
               sendNotification('departure', {
                 eventId: event.id,
                 summary: event.summary,
-                message: `Saída registrada! Você saiu do compromisso "${event.summary}" às ${now.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}.`,
+                message: `Saída registrada! Você saiu do compromisso "${event.summary}" às ${formatTimeWithTimezone(now)}.`,
                 eventTime: new Date(event.start?.dateTime || event.start?.date),
                 departureTime: now
               });
