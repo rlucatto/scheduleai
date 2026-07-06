@@ -11,7 +11,26 @@ import { calculateDailyBudget, planGoalIntent, planReverseDeadline, compareSched
 import { getPreferences, setPreferences } from './scheduler.js';
 import { searchGoogleContacts, createGoogleContact, updateGoogleContact } from './contacts.js';
 
-dotenv.config();
+
+export const logGeminiRequest = (modelName, action, payload) => {
+  try {
+    const logDir = path.resolve('logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logFilePath = path.join(logDir, 'gemini_requests.log');
+    const timestamp = new Date().toISOString();
+    
+    const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+    const logEntry = `[${timestamp}] MODEL: ${modelName} | ACTION: ${action}\nREQUEST:\n${payloadStr}\n--------------------------------------------------\n\n`;
+    
+    fs.appendFileSync(logFilePath, logEntry, 'utf8');
+    console.log(`[LOG] Logged Gemini request to ${logFilePath}`);
+  } catch (err) {
+    console.error('Failed to write Gemini request log:', err);
+  }
+};
+
 dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
 
 // Initialize local Sherpa-ONNX TTS engine with Piper pt_BR-faber-medium
@@ -1403,6 +1422,7 @@ export const getSearchGroundingContext = async (message) => {
     if (healthyKeysCount > 0) {
       const searchResult = await executeWithFallback(async (genAIInstance, modelName) => {
         const searchModel = genAIInstance.getGenerativeModel({ model: modelName });
+        logGeminiRequest(modelName, 'searchModel.generateContent (grounding search check)', { message, city, hobbies });
         const response = await searchModel.generateContent({
           contents: [{
             role: 'user',
@@ -1480,6 +1500,7 @@ ${searchResults}`;
       // Gemini Handler
       async (genAI, model) => {
         const modelObj = genAI.getGenerativeModel({ model });
+        logGeminiRequest(model, 'modelObj.generateContent (search summary)', { summaryPrompt });
         const res = await modelObj.generateContent(summaryPrompt);
         return { text: res.response.text() };
       },
@@ -1818,6 +1839,7 @@ Exemplo de formato de resposta JSON:
 
 Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer texto antes ou depois.`;
 
+        logGeminiRequest(modelName, 'model.generateContent (onboarding)', { prompt });
         const genRes = await model.generateContent(prompt);
         const textResponse = genRes.response.text().trim();
         console.log("[ONBOARDING] Gemini raw response:", textResponse);
@@ -1928,6 +1950,7 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
           tools: [calendarTools]
         });
 
+        logGeminiRequest(modelName, 'chat.sendMessage', { message, history: formattedHistory });
         let result = await chat.sendMessage(message);
         if (!result.response.candidates || result.response.candidates.length === 0 || !result.response.candidates[0].content || !result.response.candidates[0].content.parts || result.response.candidates[0].content.parts.length === 0) {
           throw new Error('Gemini API returned empty response candidates (possible rate limit/throttle).');
@@ -2104,6 +2127,7 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
           }
 
           console.log(`[AI] Sending tool responses for turn ${turns}...`);
+          logGeminiRequest(modelName, 'chat.sendMessage (toolResponses)', { toolResponses });
           result = await chat.sendMessage(toolResponses);
           if (!result.response.candidates || result.response.candidates.length === 0 || !result.response.candidates[0].content || !result.response.candidates[0].content.parts || result.response.candidates[0].content.parts.length === 0) {
             throw new Error('Gemini API returned empty response candidates (possible rate limit/throttle).');
@@ -2186,6 +2210,7 @@ const _checkSingleModelHealthRaw = async (model) => {
         const testGenAI = new GoogleGenerativeAI(keyInfo.key);
         const testModel = testGenAI.getGenerativeModel({ model });
         
+        logGeminiRequest(model, 'testModel.generateContent (health check)', { contents: [{ role: 'user', parts: [{ text: 'responder apenas OK' }] }] });
         const result = await testModel.generateContent({
           contents: [{ role: 'user', parts: [{ text: 'responder apenas OK' }] }],
           generationConfig: { maxOutputTokens: 50 }
@@ -2414,6 +2439,7 @@ export const synthesizeSpeech = async (text, voice = 'Faber') => {
             model: 'gemini-2.5-flash-preview-tts'
           });
 
+          logGeminiRequest('gemini-2.5-flash-preview-tts', 'model.generateContent (TTS)', { prompt });
           const result = await model.generateContent({
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: {
