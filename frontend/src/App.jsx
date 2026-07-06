@@ -1837,6 +1837,16 @@ function App() {
     }
   };
 
+  const formatMessageTimestamp = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const today = new Date();
+    if (d.toDateString() === today.toDateString()) {
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
   const parseChecklist = (desc) => {
     if (!desc) return [];
     const lines = desc.split('\n');
@@ -2126,7 +2136,7 @@ function App() {
     if (!textToSend) setInputText('');
     
     // Add user message to history
-    const newUserMsg = { sender: 'user', text };
+    const newUserMsg = { sender: 'user', text, timestamp: new Date().toISOString() };
     setChatHistory(prev => [...prev, newUserMsg]);
     setIsSendingChat(true);
 
@@ -2144,7 +2154,8 @@ function App() {
       setChatHistory(prev => [...prev, { 
         sender: 'assistant', 
         text: data.text, 
-        needsConfirmation: data.needsConfirmation 
+        needsConfirmation: data.needsConfirmation,
+        timestamp: new Date().toISOString()
       }]);
       if (data.modelUsed) {
         setCurrentActiveModel(data.modelUsed);
@@ -2164,7 +2175,7 @@ function App() {
       fetchTimeline();
     } catch (err) {
       console.error('Error sending chat message:', err);
-      setChatHistory(prev => [...prev, { sender: 'assistant', text: 'Ops, ocorreu um erro de conexão com o servidor. Verifique se o servidor backend está ativo.' }]);
+      setChatHistory(prev => [...prev, { sender: 'assistant', text: 'Ops, ocorreu um erro de conexão com o servidor. Verifique se o servidor backend está ativo.', timestamp: new Date().toISOString() }]);
     } finally {
       setIsSendingChat(false);
     }
@@ -2189,7 +2200,7 @@ function App() {
       }, 800);
 
       // Add feedback chat bubble
-      setChatHistory(prev => [...prev, { sender: 'assistant', text: 'Removi o compromisso solicitado da sua agenda.' }]);
+      setChatHistory(prev => [...prev, { sender: 'assistant', text: 'Removi o compromisso solicitado da sua agenda.', timestamp: new Date().toISOString() }]);
     } catch (err) {
       console.error('Error deleting event:', err);
       alert(`Falha ao excluir compromisso: ${err.message}`);
@@ -2314,7 +2325,8 @@ function App() {
               sender: 'assistant',
               text: cachedUserName 
                 ? `E aí, **${cachedUserName}**! Como posso te ajudar hoje?` 
-                : 'E aí! Como posso te ajudar hoje?'
+                : 'E aí! Como posso te ajudar hoje?',
+              timestamp: new Date().toISOString()
             }
           ]);
           return;
@@ -2324,7 +2336,8 @@ function App() {
         setChatHistory([
           {
             sender: 'assistant',
-            text: 'Conectando ao assistente...'
+            text: 'Conectando ao assistente...',
+            timestamp: new Date().toISOString()
           }
         ]);
 
@@ -2334,7 +2347,8 @@ function App() {
           setChatHistory([
             {
               sender: 'assistant',
-              text: data.text
+              text: data.text,
+              timestamp: new Date().toISOString()
             }
           ]);
         } catch (err) {
@@ -2342,7 +2356,8 @@ function App() {
           setChatHistory([
             {
               sender: 'assistant',
-              text: 'E aí! Como posso te ajudar hoje?'
+              text: 'E aí! Como posso te ajudar hoje?',
+              timestamp: new Date().toISOString()
             }
           ]);
         }
@@ -3314,6 +3329,16 @@ function App() {
                       <Volume2 size={12} /> Ouvir
                     </button>
                   )}
+                </div>
+              {msg.timestamp && (
+                <div style={{ 
+                  fontSize: '9px', 
+                  opacity: 0.5, 
+                  marginTop: '4.5px', 
+                  textAlign: msg.sender === 'user' ? 'right' : 'left',
+                  color: 'var(--text-secondary)'
+                }}>
+                  {formatMessageTimestamp(msg.timestamp)}
                 </div>
               )}
             </div>
