@@ -4404,7 +4404,7 @@ function App() {
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
                                 <strong style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)' }}>
-                                  📋 Subtarefas do Compromisso
+                                  📋 Tarefas
                                 </strong>
                                 <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
                                   {checklist.filter(i => i.checked).length}/{checklist.length} concluídas
@@ -4440,7 +4440,7 @@ function App() {
                                 </div>
                               ) : (
                                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '10px' }}>
-                                  Nenhuma subtarefa adicionada.
+                                  Nenhuma tarefa adicionada.
                                 </div>
                               )}
 
@@ -4459,7 +4459,7 @@ function App() {
                                 <input 
                                   type="text" 
                                   name="subtaskText"
-                                  placeholder="Nova subtarefa..."
+                                  placeholder="Nova tarefa..."
                                   className="form-control"
                                   style={{ 
                                     flex: 1, 
