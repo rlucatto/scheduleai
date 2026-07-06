@@ -1837,6 +1837,69 @@ function App() {
     }
   };
 
+  const parseChecklist = (desc) => {
+    if (!desc) return [];
+    const lines = desc.split('\n');
+    const items = [];
+    lines.forEach((line, index) => {
+      const match = line.match(/^(\s*[-*]?\s*)\[([ xX])\]\s*(.*)$/);
+      if (match) {
+        items.push({
+          lineIndex: index,
+          originalLine: line,
+          checked: match[2].toLowerCase() === 'x',
+          text: match[3].trim()
+        });
+      }
+    });
+    return items;
+  };
+
+  const handleToggleChecklistItem = async (eventId, fullDescription, itemToToggle) => {
+    const lines = (fullDescription || '').split('\n');
+    const lineToToggle = lines[itemToToggle.lineIndex];
+    let newLine = lineToToggle;
+    if (itemToToggle.checked) {
+      newLine = lineToToggle.replace(/\[[xX]\]/, '[ ]');
+    } else {
+      newLine = lineToToggle.replace(/\[\s*\]/, '[x]');
+    }
+    lines[itemToToggle.lineIndex] = newLine;
+    const newDescription = lines.join('\n');
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/calendar/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: newDescription })
+      });
+      if (res.ok) {
+        fetchTimeline();
+      }
+    } catch (err) {
+      console.error('Error toggling checklist item:', err);
+    }
+  };
+
+  const handleAddChecklistItem = async (eventId, fullDescription, text) => {
+    if (!text.trim()) return;
+    const cleanDesc = fullDescription ? fullDescription.trim() : '';
+    const newDescription = cleanDesc ? `${cleanDesc}\n- [ ] ${text.trim()}` : `- [ ] ${text.trim()}`;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/calendar/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: newDescription })
+      });
+      if (res.ok) {
+        fetchTimeline();
+      }
+    } catch (err) {
+      console.error('Error adding checklist item:', err);
+    }
+  };
+
   // Fetch event calculations
   const fetchTimeline = async () => {
     setIsLoadingTimeline(true);
@@ -4299,6 +4362,104 @@ function App() {
                             <span>Sem local cadastrado. Alertas de partida proativos estão desativados para este evento.</span>
                           </div>
                         )}
+
+                        {/* Subtasks Checklist */}
+                        {(() => {
+                          const checklist = parseChecklist(calc.description);
+                          
+                          return (
+                            <div style={{
+                              marginTop: '12px',
+                              padding: '12px',
+                              background: 'rgba(255, 255, 255, 0.02)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              borderRadius: '8px',
+                              fontSize: '13px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+                                <strong style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)' }}>
+                                  📋 Subtarefas do Compromisso
+                                </strong>
+                                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                                  {checklist.filter(i => i.checked).length}/{checklist.length} concluídas
+                                </span>
+                              </div>
+
+                              {checklist.length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+                                  {checklist.map((item, cIdx) => (
+                                    <label 
+                                      key={cIdx} 
+                                      style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px', 
+                                        cursor: 'pointer',
+                                        color: item.checked ? 'var(--text-secondary)' : 'var(--text-primary)',
+                                        textDecoration: item.checked ? 'line-through' : 'none'
+                                      }}
+                                    >
+                                      <input 
+                                        type="checkbox" 
+                                        checked={item.checked} 
+                                        onChange={() => handleToggleChecklistItem(calc.eventId, calc.description, item)}
+                                        style={{ 
+                                          cursor: 'pointer',
+                                          accentColor: 'var(--accent)'
+                                        }}
+                                      />
+                                      <span>{item.text}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '10px' }}>
+                                  Nenhuma subtarefa adicionada.
+                                </div>
+                              )}
+
+                              {/* Add new subtask input form */}
+                              <form 
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  const val = e.target.elements.subtaskText.value;
+                                  if (val) {
+                                    handleAddChecklistItem(calc.eventId, calc.description, val);
+                                    e.target.reset();
+                                  }
+                                }}
+                                style={{ display: 'flex', gap: '6px' }}
+                              >
+                                <input 
+                                  type="text" 
+                                  name="subtaskText"
+                                  placeholder="Nova subtarefa..."
+                                  className="form-control"
+                                  style={{ 
+                                    flex: 1, 
+                                    padding: '4px 8px', 
+                                    fontSize: '11px',
+                                    background: 'rgba(0,0,0,0.2)',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: '4px',
+                                    color: '#fff'
+                                  }}
+                                />
+                                <button 
+                                  type="submit" 
+                                  className="btn btn-primary"
+                                  style={{ 
+                                    padding: '2px 8px', 
+                                    fontSize: '11px',
+                                    borderRadius: '4px'
+                                  }}
+                                >
+                                  +
+                                </button>
+                              </form>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))
                   )}

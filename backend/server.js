@@ -553,6 +553,16 @@ app.delete('/api/calendar/events/:id', async (req, res) => {
   }
 });
 
+app.patch('/api/calendar/events/:id', async (req, res) => {
+  try {
+    const { updateEvent } = await import('./services/calendar.js');
+    const result = await updateEvent(req.params.id, req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 4. Calculations (Schedule alerts mapping for frontend)
 app.get('/api/calendar/calculate', async (req, res) => {
   try {
