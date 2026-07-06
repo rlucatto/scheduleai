@@ -21,8 +21,8 @@ export const logGeminiRequest = (modelName, action, payload) => {
     const logFilePath = path.join(logDir, 'gemini_requests.log');
     const timestamp = new Date().toISOString();
     
-    const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-    const logEntry = `[${timestamp}] MODEL: ${modelName} | ACTION: ${action}\nREQUEST:\n${payloadStr}\n--------------------------------------------------\n\n`;
+    const payloadStr = typeof payload === 'string' ? payload.replace(/\r?\n|\r/g, ' ') : JSON.stringify(payload);
+    const logEntry = `[${timestamp}] MODEL: ${modelName} | ACTION: ${action} | REQUEST: ${payloadStr}\n`;
     
     fs.appendFileSync(logFilePath, logEntry, 'utf8');
     console.log(`[LOG] Logged Gemini request to ${logFilePath}`);
