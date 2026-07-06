@@ -322,6 +322,7 @@ function App() {
   
   const [calculations, setCalculations] = useState([]);
   const [chatHistory, setChatHistory] = useState([]);
+  const [archivedHistory, setArchivedHistory] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
@@ -1979,8 +1980,9 @@ function App() {
     if (msg.actionConfirmed) return false;
     if (msg.needsConfirmation) return true;
 
+    const text = (msg.text || '').toLowerCase();
     // Strip markdown link targets (e.g. ](url)) and standalone HTTP URLs to prevent query parameters (like ?api=1) from triggering question heuristics
-    const textForCheck = (msg.text || '').toLowerCase()
+    const textForCheck = text
       .replace(/\]\([^)]+\)/g, ']')
       .replace(/https?:\/\/[^\s]+/g, '');
     const isQuestion = textForCheck.includes('?');
@@ -2507,7 +2509,22 @@ function App() {
           try {
             const parsed = JSON.parse(savedHistory);
             if (parsed && parsed.length > 0) {
-              setChatHistory(parsed);
+              const now = Date.now();
+              const oneDayMs = 24 * 60 * 60 * 1000;
+              const active = [];
+              const archived = [];
+              
+              parsed.forEach(msg => {
+                const msgTime = msg.timestamp ? new Date(msg.timestamp).getTime() : now;
+                if (now - msgTime <= oneDayMs) {
+                  active.push(msg);
+                } else {
+                  archived.push(msg);
+                }
+              });
+
+              setChatHistory(active);
+              setArchivedHistory(archived);
               return;
             }
           } catch (e) {
@@ -2787,17 +2804,16 @@ function App() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, isSendingChat]);
 
-  // Persist chat history to localStorage, omitting greeting messages
+  // Persist chat history (active + archived) to localStorage, omitting greeting messages
   useEffect(() => {
-    if (chatHistory && chatHistory.length > 0) {
-      const messagesToSave = chatHistory.filter(msg => !msg.isGreeting);
-      if (messagesToSave.length > 0) {
-        localStorage.setItem('scheduleai_chat_history', JSON.stringify(messagesToSave));
-      } else {
-        localStorage.removeItem('scheduleai_chat_history');
-      }
+    const combined = [...archivedHistory, ...chatHistory];
+    const messagesToSave = combined.filter(msg => !msg.isGreeting);
+    if (messagesToSave.length > 0) {
+      localStorage.setItem('scheduleai_chat_history', JSON.stringify(messagesToSave));
+    } else {
+      localStorage.removeItem('scheduleai_chat_history');
     }
-  }, [chatHistory]);
+  }, [chatHistory, archivedHistory]);
 
   const fetchRpmStatus = async () => {
     try {
@@ -3568,6 +3584,32 @@ function App() {
 
         {/* Messages list */}
         <div className="chat-messages">
+          {archivedHistory.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '14px 0', width: '100%' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setChatHistory(prev => [...archivedHistory, ...prev]);
+                  setArchivedHistory([]);
+                }}
+                style={{
+                  fontSize: '12px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                📜 Carregar Mensagens Anteriores ({archivedHistory.length})
+              </button>
+            </div>
+          )}
           {chatHistory.map((msg, index) => (
             <div 
               key={index} 
