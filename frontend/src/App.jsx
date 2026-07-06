@@ -2078,7 +2078,11 @@ function App() {
       });
       const data = await res.json();
       
-      setChatHistory(prev => [...prev, { sender: 'assistant', text: data.text }]);
+      setChatHistory(prev => [...prev, { 
+        sender: 'assistant', 
+        text: data.text, 
+        needsConfirmation: data.needsConfirmation 
+      }]);
       if (data.modelUsed) {
         setCurrentActiveModel(data.modelUsed);
       }
@@ -3144,6 +3148,46 @@ function App() {
             >
               {renderFormattedMessage(msg.text)}
               
+              {msg.sender === 'assistant' && msg.needsConfirmation && chatHistory.findIndex((m, idx) => m.sender === 'assistant' && idx > index) === -1 && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', marginBottom: '4px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => handleSendChat('Sim')}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%)',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(0, 198, 224, 0.2)'
+                    }}
+                  >
+                    ✓ SIM
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => handleSendChat('Cancelar')}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✕ CANCELAR
+                  </button>
+                </div>
+              )}
+
               {msg.sender === 'assistant' && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginTop: '6px', gap: '8px' }}>
                   {ttsLoadingText === msg.text && (

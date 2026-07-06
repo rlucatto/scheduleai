@@ -548,7 +548,8 @@ async function callOpenAiCompatible(serviceName, endpointUrl, apiKey, modelName,
   if (needsConfirmation) {
     return {
       text: confirmationText,
-      toolCalls: allExecutedToolCalls
+      toolCalls: allExecutedToolCalls,
+      needsConfirmation: true
     };
   }
 
@@ -1711,7 +1712,8 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
   if (needsConfirmation) {
     return {
       text: confirmationText,
-      toolCalls: allExecutedToolCalls
+      toolCalls: allExecutedToolCalls,
+      needsConfirmation: true
     };
   }
 
@@ -2057,7 +2059,8 @@ IMPORTANTE FUSO HORÁRIO: Quando você obtiver horários de eventos ou jogos da 
           const finalConfirmationText = cleanedResponseText ? (cleanedResponseText.trim() + '\n\n' + confirmationText) : confirmationText;
           return {
             text: finalConfirmationText,
-            toolCalls: allExecutedToolCalls
+            toolCalls: allExecutedToolCalls,
+            needsConfirmation: true
           };
         }
 
