@@ -303,10 +303,271 @@ const getLocalModels = async () => {
   }
 };
 
-export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, message = '') => {
+async function callOpenAiCompatible(serviceName, endpointUrl, apiKey, modelName, message, history, searchResultsContext) {
+  const prefs = getPreferences();
+  let userTz = prefs.userTimezone;
+  if (!userTz) {
+    try {
+      const { getTimezoneFromCoords } = await import('./travel.js');
+      userTz = await getTimezoneFromCoords(prefs.origin);
+    } catch (e) {
+      userTz = 'America/Sao_Paulo';
+    }
+  }
+  const tzString = getTimezoneString(userTz);
+  const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+  const systemPrompt = systemInstruction + currentRefDate + 
+    `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
+    (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '');
+
+  // Map calendarTools to OpenAI compatible format
+  const openAiTools = calendarTools.functionDeclarations.map(fd => ({
+    type: 'function',
+    function: {
+      name: fd.name,
+      description: fd.description,
+      parameters: fd.parameters ? deepConvertTypesToLowercase(fd.parameters) : {
+        type: 'object',
+        properties: {}
+      }
+    }
+  }));
+
+  // Build messages array
+  const messages = [
+    { role: 'system', content: systemPrompt }
+  ];
+
+  // Append history
+  const firstUserIndex = history.findIndex(h => h.sender === 'user');
+  if (firstUserIndex !== -1) {
+    history.slice(firstUserIndex).forEach(h => {
+      messages.push({
+        role: h.sender === 'user' ? 'user' : 'assistant',
+        content: h.text
+      });
+    });
+  }
+
+  messages.push({ role: 'user', content: message });
+
+  console.log(`[${serviceName.toUpperCase()}] Sending request to model: "${modelName}" via ${endpointUrl}`);
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`
+  };
+  if (serviceName === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://scheduleai.rlucatto.web.app';
+    headers['X-Title'] = 'ScheduleAI';
+  }
+
+  const postData = {
+    model: modelName,
+    messages,
+    tools: openAiTools,
+    stream: false
+  };
+
+  const response = await axios.post(endpointUrl, postData, { headers, timeout: 60000 });
+
+  let assistantMessage = response.data.choices[0].message;
+  let toolCalls = [];
+  let allExecutedToolCalls = [];
+
+  const parseOpenAiToolCalls = (msg) => {
+    let tc = [];
+    if (msg.tool_calls && msg.tool_calls.length > 0) {
+      tc = msg.tool_calls.map(tc => ({
+        name: tc.function.name,
+        args: typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function.arguments,
+        nativeCall: tc
+      }));
+    } else if (msg.content) {
+      try {
+        const trimmed = msg.content.trim();
+        const firstBrace = trimmed.indexOf('{');
+        const lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          const potentialJson = trimmed.substring(firstBrace, lastBrace + 1);
+          const parsed = JSON.parse(potentialJson);
+          if (parsed && parsed.name && (parsed.arguments || parsed.parameters)) {
+            const native = {
+              id: 'call_fallback_' + Date.now(),
+              type: 'function',
+              function: {
+                name: parsed.name,
+                arguments: JSON.stringify(parsed.arguments || parsed.parameters)
+              }
+            };
+            tc = [{
+              name: parsed.name,
+              args: parsed.arguments || parsed.parameters,
+              nativeCall: native
+            }];
+            msg.tool_calls = [native];
+          }
+        }
+      } catch (e) {}
+    }
+    return tc;
+  };
+
+  toolCalls = parseOpenAiToolCalls(assistantMessage);
+  let turns = 0;
+  const maxTurns = 5;
+  let needsConfirmation = false;
+  let confirmationText = '';
+
+  while (toolCalls.length > 0 && turns < maxTurns) {
+    turns++;
+    console.log(`[${serviceName.toUpperCase()}] Model requested ${toolCalls.length} tool calls on turn ${turns}.`);
+    messages.push(assistantMessage);
+    if (assistantMessage.tool_calls) {
+      allExecutedToolCalls.push(...assistantMessage.tool_calls);
+    }
+
+    for (const call of toolCalls) {
+      const { name, args, nativeCall } = call;
+      console.log(`[${serviceName.toUpperCase()} TOOL CALLING] Executing function: ${name} with args:`, args);
+
+      let functionResult;
+      try {
+        if (name === 'list_calendar_events') {
+          const events = await listEvents(args.timeMin, args.timeMax);
+          functionResult = await enrichEventsWithLocalTime(events);
+        } else if (name === 'create_calendar_event') {
+          if (!args.confirmed) {
+            const dateStr = formatDateTimePtBr(args.startTime);
+            const locStr = args.location ? ` no local "${args.location}"` : '';
+            confirmationText = `Você confirma o agendamento do compromisso "${args.summary}" para ${dateStr}${locStr}?`;
+            needsConfirmation = true;
+            break;
+          }
+          functionResult = await insertEvent({
+            summary: args.summary,
+            location: args.location,
+            description: args.description || 'Criado via Assistente Virtual ScheduleAI',
+            start: { dateTime: args.startTime },
+            end: { dateTime: args.endTime }
+          });
+        } else if (name === 'delete_calendar_event') {
+          if (!args.confirmed) {
+            let eventSummary = 'compromisso';
+            try {
+              const events = await listEvents();
+              const event = events.find(e => e.id === args.eventId);
+              if (event) {
+                eventSummary = `"${event.summary}" agendado para ${formatDateTimePtBr(event.start.dateTime || event.start.date)}`;
+              }
+            } catch (e) {
+              console.error('Error fetching event for deletion confirmation:', e);
+            }
+            confirmationText = `Você confirma a exclusão do ${eventSummary}?`;
+            needsConfirmation = true;
+            break;
+          }
+          functionResult = await deleteEvent(args.eventId);
+        } else if (name === 'check_travel_time') {
+          functionResult = await getTravelTime(getPreferences().origin, args.destination, args.transportMode);
+        } else if (name === 'get_daily_time_budget') {
+          functionResult = await calculateDailyBudget(args.date);
+        } else if (name === 'create_goal_intent') {
+          functionResult = await planGoalIntent({
+            title: args.title,
+            frequency: args.frequency,
+            durationMinutes: args.durationMinutes,
+            preferredPeriod: args.preferredPeriod,
+            startDate: args.startDate
+          });
+        } else if (name === 'create_reverse_plan') {
+          functionResult = await planReverseDeadline(args.deadline, args.projectTitle);
+        } else if (name === 'compare_scheduling_days') {
+          functionResult = await compareSchedulingDays(args.day1, args.day2);
+        } else if (name === 'list_tasks') {
+          functionResult = listTasks();
+        } else if (name === 'create_task') {
+          functionResult = insertTask({
+            summary: args.summary,
+            description: args.description,
+            estimatedDuration: args.estimatedDuration,
+            priority: args.priority,
+            requiredEnergy: args.requiredEnergy,
+            deadline: args.deadline,
+            context: args.context
+          });
+        } else if (name === 'update_user_preferences') {
+          functionResult = await handleUpdateUserPreferences(args);
+          if (functionResult && functionResult.status === 'needs_confirmation') {
+            confirmationText = functionResult.error;
+            needsConfirmation = true;
+            break;
+          }
+        } else if (name === 'search_contacts') {
+          functionResult = await searchGoogleContacts(args.query);
+        } else if (name === 'create_contact') {
+          functionResult = await createGoogleContact(args);
+        } else if (name === 'update_contact') {
+          functionResult = await updateGoogleContact(args.resourceName, args);
+        } else if (name === 'reverse_geocode') {
+          functionResult = { address: await reverseGeocode(args.coordinates) };
+        } else {
+          functionResult = { error: `Function ${name} not found.` };
+        }
+      } catch (err) {
+        console.error(`${serviceName.toUpperCase()} Tool execution error: ${name}`, err);
+        functionResult = { error: err.message };
+      }
+
+      messages.push({
+        role: 'tool',
+        tool_call_id: nativeCall.id || ('call_' + Math.random().toString(36).substr(2, 9)),
+        name: name,
+        content: JSON.stringify(functionResult)
+      });
+    }
+
+    if (needsConfirmation) {
+      break;
+    }
+
+    console.log(`[${serviceName.toUpperCase()}] Sending follow-up request with tool results...`);
+    const followUpResponse = await axios.post(endpointUrl, {
+      model: modelName,
+      messages,
+      tools: openAiTools,
+      stream: false
+    }, { headers, timeout: 60000 });
+
+    assistantMessage = followUpResponse.data.choices[0].message;
+    toolCalls = parseOpenAiToolCalls(assistantMessage);
+  }
+
+  if (needsConfirmation) {
+    return {
+      text: confirmationText,
+      toolCalls: allExecutedToolCalls
+    };
+  }
+
+  return {
+    text: assistantMessage.content,
+    toolCalls: allExecutedToolCalls
+  };
+}
+
+export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, message = '', history = [], searchResultsContext = '') => {
   const prefs = getPreferences();
   let models = [...(prefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'])];
   
+  // Auto-append Groq and OpenRouter models as fallbacks if keys are configured
+  if (process.env.GROQ_API_KEY && !models.includes('groq-llama-3.3-70b')) {
+    models.push('groq-llama-3.3-70b');
+  }
+  if (process.env.OPENROUTER_API_KEY && !models.includes('openrouter-llama-3.3-70b')) {
+    models.push('openrouter-llama-3.3-70b');
+  }
+
   // Auto-append local Ollama models if they aren't already in the priority list
   try {
     const localModels = await getLocalModels();
@@ -322,6 +583,46 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
   const sortedModels = getSmartSortedModels(models, message);
   
   for (const modelName of sortedModels) {
+    if (modelName === 'groq-llama-3.3-70b') {
+      try {
+        console.log(`[GROQ ROUTING] Trying Groq model Llama 3.3`);
+        const result = await callOpenAiCompatible(
+          'groq',
+          'https://api.groq.com/openai/v1/chat/completions',
+          process.env.GROQ_API_KEY,
+          'llama-3.3-70b-versatile',
+          message,
+          history,
+          searchResultsContext
+        );
+        lastModelUsed = modelName;
+        return { ...result, modelUsed: modelName };
+      } catch (error) {
+        console.warn(`[GROQ ROUTING] Groq model failed:`, error.message);
+        continue;
+      }
+    }
+
+    if (modelName === 'openrouter-llama-3.3-70b') {
+      try {
+        console.log(`[OPENROUTER ROUTING] Trying OpenRouter model Llama 3.3 Free`);
+        const result = await callOpenAiCompatible(
+          'openrouter',
+          'https://openrouter.ai/api/v1/chat/completions',
+          process.env.OPENROUTER_API_KEY,
+          'meta-llama/llama-3.3-70b-instruct:free',
+          message,
+          history,
+          searchResultsContext
+        );
+        lastModelUsed = modelName;
+        return { ...result, modelUsed: modelName };
+      } catch (error) {
+        console.warn(`[OPENROUTER ROUTING] OpenRouter model failed:`, error.message);
+        continue;
+      }
+    }
+
     if (!modelName.startsWith('gemini-')) {
       if (!ollamaApiCallFn) {
         continue; // Skip local models if no Ollama handler is provided (e.g. during search grounding)
@@ -1131,7 +1432,7 @@ ${searchResults}`;
   }
 };
 
-const deepConvertTypesToLowercase = (obj) => {
+function deepConvertTypesToLowercase(obj) {
   if (obj === null || typeof obj !== 'object') {
     return obj;
   }
@@ -1147,7 +1448,7 @@ const deepConvertTypesToLowercase = (obj) => {
     }
   }
   return result;
-};
+}
 
 const callOllama = async (modelName, message, history, searchResultsContext) => {
   const prefs = getPreferences();
@@ -1737,7 +2038,9 @@ IMPORTANTE FUSO HORÁRIO: Quando você obtiver horários de eventos ou jogos da 
       async (modelName) => {
         return await callOllama(modelName, message, history, searchResultsContext);
       },
-      message
+      message,
+      history,
+      searchResultsContext
     );
   } catch (error) {
     console.error('Error during chatWithAssistant execution:', error);
@@ -1811,6 +2114,56 @@ const _checkSingleModelHealthRaw = async (model) => {
       status: anyActive ? 'active' : 'inactive',
       message: combinedMessage
     };
+  } else if (model === 'groq-llama-3.3-70b') {
+    if (!process.env.GROQ_API_KEY) {
+      return { status: 'inactive', message: 'Chave Groq não configurada no .env' };
+    }
+    try {
+      const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: 'responder apenas OK' }],
+        max_tokens: 2
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+        },
+        timeout: 10000
+      });
+      if (response.data && response.data.choices && response.data.choices[0]) {
+        return { status: 'active', message: 'Funcional - Respondendo via Groq.' };
+      } else {
+        return { status: 'inactive', message: 'Respondendo via Groq, mas sem escolhas retornadas.' };
+      }
+    } catch (err) {
+      return { status: 'inactive', message: `Erro Groq: ${err.message}` };
+    }
+  } else if (model === 'openrouter-llama-3.3-70b') {
+    if (!process.env.OPENROUTER_API_KEY) {
+      return { status: 'inactive', message: 'Chave OpenRouter não configurada no .env' };
+    }
+    try {
+      const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+        model: 'meta-llama/llama-3.3-70b-instruct:free',
+        messages: [{ role: 'user', content: 'responder apenas OK' }],
+        max_tokens: 2
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://scheduleai.rlucatto.web.app',
+          'X-Title': 'ScheduleAI'
+        },
+        timeout: 10000
+      });
+      if (response.data && response.data.choices && response.data.choices[0]) {
+        return { status: 'active', message: 'Funcional - Respondendo via OpenRouter.' };
+      } else {
+        return { status: 'inactive', message: 'Respondendo via OpenRouter, mas sem escolhas retornadas.' };
+      }
+    } catch (err) {
+      return { status: 'inactive', message: `Erro OpenRouter: ${err.message}` };
+    }
   } else {
     // Ollama model
     try {

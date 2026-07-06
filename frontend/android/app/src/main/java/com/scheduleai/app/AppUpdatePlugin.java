@@ -106,4 +106,25 @@ public class AppUpdatePlugin extends Plugin {
             }
         }).start();
     }
+
+    @PluginMethod
+    public void openUrlInBrowser(PluginCall call) {
+        String urlString = call.getString("url");
+        if (urlString == null) {
+            call.reject("URL is null");
+            return;
+        }
+        try {
+            Context context = getContext();
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(urlString));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+
+            JSObject ret = new JSObject();
+            ret.put("status", "success");
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to open URL in browser: " + e.getMessage(), e);
+        }
+    }
 }

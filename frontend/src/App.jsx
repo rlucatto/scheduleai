@@ -410,19 +410,17 @@ function App() {
   }, []);
 
   const handlePerformUpdate = async () => {
-    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.AppUpdate) return;
-    setIsDownloadingUpdate(true);
-    setUpdateError('');
+    console.log('[UPDATE] Opening update URL:', updateApkUrl);
     try {
-      console.log('[UPDATE] Initiating download from:', updateApkUrl);
-      await window.Capacitor.Plugins.AppUpdate.downloadAndInstallUpdate({ url: updateApkUrl });
-      console.log('[UPDATE] Native installer triggered successfully.');
+      if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppUpdate) {
+        await window.Capacitor.Plugins.AppUpdate.openUrlInBrowser({ url: updateApkUrl });
+      } else {
+        window.open(updateApkUrl, '_blank');
+      }
       setShowUpdateModal(false);
-      setIsDownloadingUpdate(false);
     } catch (err) {
-      console.error('[UPDATE] Download/install failed:', err);
-      setUpdateError('Falha no download da atualização. Verifique sua conexão.');
-      setIsDownloadingUpdate(false);
+      console.error('[UPDATE] Failed to open URL:', err);
+      window.location.href = updateApkUrl;
     }
   };
 

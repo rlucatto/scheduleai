@@ -476,13 +476,21 @@ app.get('/api/preferences', (req, res) => {
 });
 
 app.get('/api/models/local', async (req, res) => {
+  const extraModels = [];
+  if (process.env.GROQ_API_KEY) {
+    extraModels.push('groq-llama-3.3-70b');
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    extraModels.push('openrouter-llama-3.3-70b');
+  }
+
   try {
     const response = await axios.get('http://localhost:11434/api/tags', { timeout: 2000 });
     const models = response.data.models || [];
-    res.json(models.map(m => m.name));
+    res.json([...extraModels, ...models.map(m => m.name)]);
   } catch (err) {
     console.log('Ollama not running or unreachable:', err.message);
-    res.json([]);
+    res.json(extraModels);
   }
 });
 
@@ -1108,8 +1116,8 @@ app.get('/api/location/history', async (req, res) => {
 // 9. Application Self-Update Routes
 app.get('/api/app/version', (req, res) => {
   res.json({
-    versionCode: 17,
-    versionName: "2.6",
+    versionCode: 18,
+    versionName: "2.7",
     apkUrl: `${req.protocol}://${req.get('host')}/api/app/download`
   });
 });
