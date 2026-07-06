@@ -318,6 +318,7 @@ function App() {
     hobbies: '',
     birthdayAlerts: ''
   });
+  const [visibleCommentForm, setVisibleCommentForm] = useState({});
   
   const [calculations, setCalculations] = useState([]);
   const [chatHistory, setChatHistory] = useState([]);
@@ -1157,6 +1158,16 @@ function App() {
       rec.onerror = (e) => {
         console.warn('[STT] Speech recognition error:', e.error);
         setIsListening(false);
+        
+        let msg = 'Erro no reconhecimento de voz.';
+        if (e.error === 'not-allowed') {
+          msg = 'Permissão de microfone negada. Ative o microfone nas configurações do app ou do navegador.';
+        } else if (e.error === 'no-speech') {
+          msg = 'Nenhuma voz detectada. Mantenha pressionado e fale claramente.';
+        } else if (e.error === 'network') {
+          msg = 'Erro de rede. Verifique sua conexão com a internet.';
+        }
+        addCustomToast('Erro de Áudio', msg, 'error');
       };
 
       rec.onend = () => {
@@ -1910,6 +1921,107 @@ function App() {
     }
   };
 
+  const parseComments = (desc) => {
+    if (!desc) return [];
+    const lines = desc.split('\n');
+    const comments = [];
+    lines.forEach((line) => {
+      const match = line.match(/^💬\s*Comentário\s*(?:\((.*?)\))?:\s*(.*)$/);
+      if (match) {
+        comments.push({
+          timestamp: match[1] || '',
+          text: match[2].trim()
+        });
+      }
+    });
+    return comments;
+  };
+
+  const handleAddComment = async (eventId, fullDescription, text) => {
+    if (!text.trim()) return;
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const timeStr = `${day}/${month} ${hours}:${minutes}`;
+
+    const cleanDesc = fullDescription ? fullDescription.trim() : '';
+    const newCommentLine = `💬 Comentário (${timeStr}): ${text.trim()}`;
+    const newDescription = cleanDesc ? `${cleanDesc}\n${newCommentLine}` : newCommentLine;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/calendar/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: newDescription })
+      });
+      if (res.ok) {
+        fetchTimeline();
+      }
+    } catch (err) {
+      console.error('Error adding comment:', err);
+    }
+  };
+
+  const checkIfNeedsConfirmation = (msg) => {
+    if (!msg || msg.sender !== 'assistant') return false;
+    if (msg.actionConfirmed) return false;
+    if (msg.needsConfirmation) return true;
+
+    const text = (msg.text || '').toLowerCase();
+    const isQuestion = text.includes('?');
+    if (!isQuestion) return false;
+
+    // Exclude open-ended questions
+    const isOpenEnded = 
+      text.includes('como ') || 
+      text.includes('o que ') || 
+      text.includes('qual ') || 
+      text.includes('quais ') || 
+      text.includes('quando ') || 
+      text.includes('onde ') || 
+      text.includes('por que ') || 
+      text.includes('por quê ') || 
+      text.includes('quem ');
+
+    if (isOpenEnded) return false;
+
+    // Include yes/no confirmation patterns
+    const hasConfirmationKeywords = 
+      text.includes('confirma') || 
+      text.includes('quer') || 
+      text.includes('posso') || 
+      text.includes('deseja') || 
+      text.includes('certeza') || 
+      text.includes('agendar') || 
+      text.includes('deletar') || 
+      text.includes('apagar') || 
+      text.includes('remover') || 
+      text.includes('alterar') ||
+      text.includes('marcar') ||
+      text.includes('adicionar') ||
+      text.includes('criar') ||
+      text.includes('confirmar');
+
+    return hasConfirmationKeywords;
+  };
+
+  const handleConfirmAction = (choice, msgIndex) => {
+    setChatHistory(prev => {
+      const updated = [...prev];
+      if (updated[msgIndex]) {
+        updated[msgIndex] = {
+          ...updated[msgIndex],
+          needsConfirmation: false,
+          actionConfirmed: true
+        };
+      }
+      return updated;
+    });
+    handleSendChat(choice);
+  };
+
   // Fetch event calculations
   const fetchTimeline = async () => {
     setIsLoadingTimeline(true);
@@ -2015,6 +2127,8 @@ function App() {
       const data = await res.json();
       setStatus(data.status);
       localStorage.removeItem('scheduleai_preferences');
+      localStorage.removeItem('scheduleai_chat_history');
+      setChatHistory([]);
       setContacts([]);
       fetchTags('');
       fetchTimeline();
@@ -2306,6 +2420,20 @@ function App() {
 
     const initData = async () => {
       const initGreeting = async () => {
+        // Read saved chat history first
+        const savedHistory = localStorage.getItem('scheduleai_chat_history');
+        if (savedHistory) {
+          try {
+            const parsed = JSON.parse(savedHistory);
+            if (parsed && parsed.length > 0) {
+              setChatHistory(parsed);
+              return;
+            }
+          } catch (e) {
+            console.error('Error parsing saved chat history:', e);
+          }
+        }
+
         // Read cached preferences to check if onboarding is completed
         const localPrefsStr = localStorage.getItem('scheduleai_preferences');
         let isOnboardingCompleted = false;
@@ -2326,7 +2454,8 @@ function App() {
               text: cachedUserName 
                 ? `E aí, **${cachedUserName}**! Como posso te ajudar hoje?` 
                 : 'E aí! Como posso te ajudar hoje?',
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              isGreeting: true
             }
           ]);
           return;
@@ -2337,7 +2466,8 @@ function App() {
           {
             sender: 'assistant',
             text: 'Conectando ao assistente...',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            isGreeting: true
           }
         ]);
 
@@ -2348,7 +2478,8 @@ function App() {
             {
               sender: 'assistant',
               text: data.text,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              isGreeting: true
             }
           ]);
         } catch (err) {
@@ -2357,7 +2488,8 @@ function App() {
             {
               sender: 'assistant',
               text: 'E aí! Como posso te ajudar hoje?',
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              isGreeting: true
             }
           ]);
         }
@@ -2568,6 +2700,18 @@ function App() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, isSendingChat]);
+
+  // Persist chat history to localStorage, omitting greeting messages
+  useEffect(() => {
+    if (chatHistory && chatHistory.length > 0) {
+      const messagesToSave = chatHistory.filter(msg => !msg.isGreeting);
+      if (messagesToSave.length > 0) {
+        localStorage.setItem('scheduleai_chat_history', JSON.stringify(messagesToSave));
+      } else {
+        localStorage.removeItem('scheduleai_chat_history');
+      }
+    }
+  }, [chatHistory]);
 
   // Quick Prompt Click handler
   const handleQuickPrompt = (prompt) => {
@@ -3226,37 +3370,30 @@ function App() {
             >
               {renderFormattedMessage(msg.text)}
               
-              {msg.sender === 'assistant' && msg.needsConfirmation && chatHistory.findIndex((m, idx) => m.sender === 'assistant' && idx > index) === -1 && (
+              {msg.sender === 'assistant' && checkIfNeedsConfirmation(msg) && chatHistory.findIndex((m, idx) => m.sender === 'assistant' && idx > index) === -1 && (
                 <div style={{ display: 'flex', gap: '8px', marginTop: '10px', marginBottom: '4px' }}>
                   <button
                     type="button"
-                    className="btn btn-primary"
-                    onClick={() => handleSendChat('Sim')}
+                    className="btn btn-success-solid"
+                    onClick={() => handleConfirmAction('Sim', index)}
                     style={{
                       padding: '6px 14px',
                       fontSize: '12px',
                       fontWeight: 'bold',
-                      background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%)',
-                      color: '#fff',
-                      border: 'none',
                       borderRadius: '6px',
-                      cursor: 'pointer',
-                      boxShadow: '0 2px 6px rgba(0, 198, 224, 0.2)'
+                      cursor: 'pointer'
                     }}
                   >
                     ✓ SIM
                   </button>
                   <button
                     type="button"
-                    className="btn btn-secondary"
-                    onClick={() => handleSendChat('Cancelar')}
+                    className="btn btn-danger-solid"
+                    onClick={() => handleConfirmAction('Cancelar', index)}
                     style={{
                       padding: '6px 14px',
                       fontSize: '12px',
                       fontWeight: 'bold',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'var(--text-secondary)',
-                      border: '1px solid var(--border-color)',
                       borderRadius: '6px',
                       cursor: 'pointer'
                     }}
@@ -3450,6 +3587,10 @@ function App() {
               <button
                 type="button"
                 className={`btn-mic-outer ${isListening ? 'listening' : ''}`}
+                onMouseDown={startListening}
+                onMouseUp={stopListening}
+                onTouchStart={startListening}
+                onTouchEnd={stopListening}
                 onPointerDown={startListening}
                 onPointerUp={stopListening}
                 onPointerLeave={stopListening}
@@ -3967,170 +4108,6 @@ function App() {
 
             {agendaSubTab === 'dia' && (
               <>
-                {calculations.length > 0 && (() => {
-                  const now = currentTime;
-                  const dayEvents = calculations.map((calc, idx) => {
-                    const evStart = parseDateSafe(calc.eventStart);
-                    if (!evStart) return null;
-                    const evEnd = parseDateSafe(calc.eventEnd) || new Date(evStart.getTime() + 60 * 60 * 1000);
-                    const departure = parseDateSafe(calc.departureTime) || evStart;
-
-                    // Hide prep time if already in transit or arrived
-                    const isPastDeparture = now.getTime() > departure.getTime();
-                    const hasArrived = calc.description?.includes('[actual_arrival:') || now.getTime() > evStart.getTime();
-                    const hidePrep = isPastDeparture || hasArrived;
-
-                    const getReady = hidePrep ? departure : (parseDateSafe(calc.getReadyTime) || evStart);
-
-                    return {
-                      ...calc,
-                      evStart,
-                      evEnd,
-                      getReady,
-                      departure,
-                      eventColor: getEventColor(calc.eventId, idx)
-                    };
-                  }).filter(Boolean);
-
-                  if (dayEvents.length === 0) return null;
-
-                  // Calculate min and max times of the occupied schedule
-                  const minTimeMs = Math.min(...dayEvents.map(e => e.getReady.getTime()));
-                  const maxTimeMs = Math.max(...dayEvents.map(e => e.evEnd.getTime()));
-                  const totalDurationMs = maxTimeMs - minTimeMs;
-
-                  const nowMs = now.getTime();
-                  const showNowIndicator = nowMs >= minTimeMs && nowMs <= maxTimeMs;
-                  const nowPct = showNowIndicator ? ((nowMs - minTimeMs) / totalDurationMs) * 100 : 0;
-
-                  const getPctCropped = (date) => {
-                    if (!date) return 0;
-                    const timeMs = date.getTime();
-                    if (totalDurationMs <= 0) return 0;
-                    return ((timeMs - minTimeMs) / totalDurationMs) * 100;
-                  };
-
-                  // Collect transition ticks for the timeline scale
-                  const ticks = [];
-                  dayEvents.forEach((event) => {
-                    ticks.push({ time: event.getReady, pct: getPctCropped(event.getReady) });
-                    ticks.push({ time: event.departure, pct: getPctCropped(event.departure) });
-                    ticks.push({ time: event.evStart, pct: getPctCropped(event.evStart) });
-                    ticks.push({ time: event.evEnd, pct: getPctCropped(event.evEnd) });
-                  });
-
-                  // Sort and remove duplicate ticks (within 1 minute) to prevent text overlapping
-                  const uniqueTicks = [];
-                  ticks.sort((a, b) => a.time.getTime() - b.time.getTime());
-                  ticks.forEach((tick) => {
-                    if (!uniqueTicks.some(t => Math.abs(t.time.getTime() - tick.time.getTime()) < 60 * 1000)) {
-                      uniqueTicks.push(tick);
-                    }
-                  });
-
-                  const upcomingDepartures = dayEvents.filter(e => {
-                    const timeDiffMs = e.departure.getTime() - now.getTime();
-                    return timeDiffMs > 0 && timeDiffMs <= 60 * 60 * 1000;
-                  });
-
-                  return (
-                    <div className="card glass animate-fade-in" style={{ padding: '20px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      <h3 style={{ fontSize: '15px', margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Clock size={16} /> Visualização Diária (Horários Ocupados)
-                      </h3>
-                      
-                      {upcomingDepartures.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {upcomingDepartures.map(e => (
-                            <div key={e.eventId} className="alert alert-warning animate-pulse" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', fontSize: '12px' }}>
-                              <AlertTriangle size={14} />
-                              <span>Atenção! Você precisa sair para <strong>{e.summary}</strong> em {Math.round((e.departure.getTime() - now.getTime()) / (60 * 1000))} minutos.</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Main occupied timeline */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {/* Timeline Header label */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
-                          <span>Início do Dia</span>
-                          <span>Fim dos Compromissos</span>
-                        </div>
-
-                        {/* Visual timeline bar */}
-                        <div style={{ position: 'relative', height: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                          {/* occupied events segments */}
-                          {dayEvents.map((event) => {
-                            const left = getPctCropped(event.getReady);
-                            const width = getPctCropped(event.evEnd) - left;
-                            return (
-                              <div 
-                                key={event.eventId} 
-                                style={{
-                                  position: 'absolute',
-                                  left: `${left}%`,
-                                  width: `${width}%`,
-                                  top: 0,
-                                  bottom: 0,
-                                  background: event.eventColor,
-                                  opacity: 0.85,
-                                  cursor: 'pointer'
-                                }}
-                                onClick={() => {
-                                  // Scroll to specific card
-                                  const el = document.querySelector(`[data-event-id="${event.eventId}"]`);
-                                  if (el) {
-                                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    el.classList.add('highlight-flash');
-                                    setTimeout(() => el.classList.remove('highlight-flash'), 1500);
-                                  }
-                                }}
-                                title={`${event.summary} (${formatTime(event.getReady)} - ${formatTime(event.evEnd)})`}
-                              />
-                            );
-                          })}
-
-                          {/* Current time indicator line */}
-                          {showNowIndicator && (
-                            <div 
-                              style={{
-                                position: 'absolute',
-                                left: `${nowPct}%`,
-                                top: 0,
-                                bottom: 0,
-                                width: '2px',
-                                backgroundColor: '#ef4444',
-                                boxShadow: '0 0 6px rgba(239, 68, 68, 0.9)',
-                                zIndex: 10
-                              }}
-                              title={`Agora: ${formatTime(now)}`}
-                            />
-                          )}
-                        </div>
-
-                        {/* Timeline scales ticks */}
-                        <div style={{ position: 'relative', height: '16px', fontSize: '8px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                          {uniqueTicks.map((tick, idx) => (
-                            <span 
-                              key={idx} 
-                              style={{
-                                position: 'absolute',
-                                left: `${tick.pct}%`,
-                                transform: tick.pct > 90 ? 'translateX(-100%)' : tick.pct < 10 ? 'translateX(0%)' : 'translateX(-50%)',
-                                whiteSpace: 'nowrap',
-                                fontWeight: '600'
-                              }}
-                            >
-                              {formatTime(tick.time)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
                 <div 
                   ref={appointmentsContainerRef}
                   className="timeline-grid animate-fade-in"
@@ -4483,6 +4460,130 @@ function App() {
                                   +
                                 </button>
                               </form>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Comments Section */}
+                        {(() => {
+                          const comments = parseComments(calc.description);
+                          const isFormVisible = !!visibleCommentForm[calc.eventId];
+                          
+                          return (
+                            <div style={{
+                              marginTop: '8px',
+                              padding: '12px',
+                              background: 'rgba(255, 255, 255, 0.02)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              borderRadius: '8px',
+                              fontSize: '13px'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+                                <strong style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)' }}>
+                                  💬 Comentários
+                                </strong>
+                              </div>
+
+                              {comments.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                                  {comments.map((comment, cIdx) => (
+                                    <div 
+                                      key={cIdx} 
+                                      style={{ 
+                                        padding: '8px',
+                                        background: 'rgba(255, 255, 255, 0.03)',
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(255, 255, 255, 0.05)'
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                        <span>Usuário</span>
+                                        <span>{comment.timestamp}</span>
+                                      </div>
+                                      <div style={{ color: 'var(--text-primary)', wordBreak: 'break-word', fontSize: '12px' }}>
+                                        {comment.text}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {isFormVisible ? (
+                                <form 
+                                  onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const val = e.target.elements.commentText.value;
+                                    if (val) {
+                                      handleAddComment(calc.eventId, calc.description, val);
+                                      e.target.reset();
+                                      setVisibleCommentForm(prev => ({ ...prev, [calc.eventId]: false }));
+                                    }
+                                  }}
+                                  style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}
+                                >
+                                  <textarea 
+                                    name="commentText"
+                                    placeholder="Escreva um comentário..."
+                                    className="form-control"
+                                    rows={2}
+                                    style={{ 
+                                      width: '100%',
+                                      padding: '6px 8px', 
+                                      fontSize: '12px',
+                                      background: 'rgba(0,0,0,0.2)',
+                                      border: '1px solid var(--border-color)',
+                                      borderRadius: '4px',
+                                      color: '#fff',
+                                      resize: 'none'
+                                    }}
+                                    autoFocus
+                                  />
+                                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                                    <button 
+                                      type="button"
+                                      className="btn btn-secondary"
+                                      onClick={() => setVisibleCommentForm(prev => ({ ...prev, [calc.eventId]: false }))}
+                                      style={{ 
+                                        padding: '4px 8px', 
+                                        fontSize: '11px',
+                                        borderRadius: '4px'
+                                      }}
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button 
+                                      type="submit" 
+                                      className="btn btn-primary"
+                                      style={{ 
+                                        padding: '4px 12px', 
+                                        fontSize: '11px',
+                                        borderRadius: '4px'
+                                      }}
+                                    >
+                                      Salvar
+                                    </button>
+                                  </div>
+                                </form>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setVisibleCommentForm(prev => ({ ...prev, [calc.eventId]: true }))}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--accent-hover)',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    padding: '4px 0',
+                                    fontWeight: '500',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  + Adicionar comentário
+                                </button>
+                              )}
                             </div>
                           );
                         })()}
@@ -5466,8 +5567,7 @@ function App() {
   };
 
   return (
-    <div className={`app-container ${isMobile ? 'mobile-mode' : 'desktop-mode'}`}>
-      
+    <>
       {/* Toast Notification Containers */}
       <div className="toast-container">
         {toasts.map(toast => (
@@ -5483,6 +5583,8 @@ function App() {
           </div>
         ))}
       </div>
+
+      <div className={`app-container ${isMobile ? 'mobile-mode' : 'desktop-mode'}`}>
 
       {isMobile ? (
         <>
@@ -6324,6 +6426,7 @@ function App() {
       `}</style>
 
     </div>
+    </>
   );
 }
 
