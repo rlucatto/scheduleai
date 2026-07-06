@@ -1985,7 +1985,20 @@ function App() {
       text.includes('por quê ') || 
       text.includes('quem ');
 
-    if (isOpenEnded) return false;
+    // Exclude generic assistant follow-up questions (e.g. "Deseja algo mais?")
+    const isGenericFollowUp = 
+      text.includes('algo mais') ||
+      text.includes('mais alguma coisa') ||
+      text.includes('mais algo') ||
+      text.includes('outra coisa') ||
+      text.includes('ajudar com mais') ||
+      text.includes('ajudar em mais') ||
+      text.includes('ajudar em algo') ||
+      text.includes('mais alguma dúvida') ||
+      text.includes('mais alguma pergunta') ||
+      text.includes('fazer mais alguma');
+
+    if (isOpenEnded || isGenericFollowUp) return false;
 
     // Include yes/no confirmation patterns
     const hasConfirmationKeywords = 
