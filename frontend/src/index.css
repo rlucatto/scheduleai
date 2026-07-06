@@ -1028,3 +1028,23 @@ h1, h2, h3, h4 {
 .chat-input {
   padding-left: 4px;
 }
+
+/* RPM Warning Pulse Animation */
+.pulse-danger {
+  animation: pulse-danger-anim 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-danger-anim {
+  0% {
+    opacity: 0.6;
+    text-shadow: 0 0 0px rgba(239, 68, 68, 0);
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+  }
+  100% {
+    opacity: 0.6;
+    text-shadow: 0 0 0px rgba(239, 68, 68, 0);
+  }
+}

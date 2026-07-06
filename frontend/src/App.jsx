@@ -343,6 +343,7 @@ function App() {
   const [logsData, setLogsData] = useState([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [expandedPayloads, setExpandedPayloads] = useState({});
+  const [rpmStatus, setRpmStatus] = useState({ count: 0, timeLeft: 0, limit: 15 });
 
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -1337,6 +1338,9 @@ function App() {
       }
       if (data.lastKeyStringUsed !== undefined) {
         setCurrentActiveKeyString(data.lastKeyStringUsed);
+      }
+      if (data.rpmStatus) {
+        setRpmStatus(data.rpmStatus);
       }
 
       // Fetch local Ollama models list asynchronously in the background
@@ -2767,6 +2771,11 @@ function App() {
       fetchTimeline();
     });
 
+    socket.on('rpm_update', (data) => {
+      console.log('RPM status update from socket:', data);
+      setRpmStatus(data);
+    });
+
     return () => {
       window.removeEventListener('message', handleMessage);
       socket.disconnect();
@@ -2789,6 +2798,40 @@ function App() {
       }
     }
   }, [chatHistory]);
+
+  const fetchRpmStatus = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/rpm/status`);
+      if (res.ok) {
+        const data = await res.json();
+        setRpmStatus(data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch RPM status:', err);
+    }
+  };
+
+  // Timer to count down remaining seconds for Gemini RPM sliding window reset
+  useEffect(() => {
+    if (rpmStatus.timeLeft <= 0) return;
+    
+    const interval = setInterval(() => {
+      setRpmStatus(prev => {
+        if (prev.timeLeft <= 1) {
+          // Time is up! Trigger a fetch to get the actual rolling state from the server
+          fetchRpmStatus();
+          clearInterval(interval);
+          return { ...prev, timeLeft: 0 };
+        }
+        return {
+          ...prev,
+          timeLeft: prev.timeLeft - 1
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [rpmStatus.timeLeft]);
 
   // Quick Prompt Click handler
   const handleQuickPrompt = (prompt) => {
@@ -3457,8 +3500,72 @@ function App() {
   };
 
   const renderChat = () => {
+    let rpmColor = '#10b981'; // Green
+    let isCritical = false;
+
+    if (rpmStatus.count >= 12) {
+      rpmColor = '#f59e0b'; // Yellow
+    }
+    if (rpmStatus.count >= 15) {
+      rpmColor = '#ef4444'; // Red
+      isCritical = true;
+    }
+
     return (
       <section className={`chat-section ${isMobile ? 'mobile-tab-content' : ''}`}>
+        {/* RPM Status Bar Header */}
+        <div 
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '10px 16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderBottom: '1px solid var(--border-color)',
+            fontSize: '12px',
+            color: 'var(--text-secondary)',
+            gap: '12px',
+            flexWrap: 'wrap',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+            <span style={{ fontSize: '14px' }}>🤖</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500' }}>
+              {currentActiveModel || preferences.modelPriority?.[0] || 'gemini-2.5-flash'}
+            </span>
+            {currentActiveKeyString && (
+              <span style={{ fontSize: '10px', background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px', opacity: 0.8 }}>
+                key: {currentActiveKeyString}
+              </span>
+            )}
+          </div>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
+            <span 
+              className={isCritical ? 'pulse-danger' : ''}
+              style={{
+                color: rpmColor,
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'color 0.3s ease'
+              }}
+            >
+              <span>⚡</span>
+              <span>{rpmStatus.count}/{rpmStatus.limit} RPM</span>
+            </span>
+            
+            {rpmStatus.count > 0 && rpmStatus.timeLeft > 0 && (
+              <span style={{ fontSize: '11px', opacity: 0.8 }}>
+                (reset em {rpmStatus.timeLeft}s)
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Messages list */}
         <div className="chat-messages">
           {chatHistory.map((msg, index) => (

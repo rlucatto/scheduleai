@@ -12,7 +12,47 @@ import { getPreferences, setPreferences } from './scheduler.js';
 import { searchGoogleContacts, createGoogleContact, updateGoogleContact } from './contacts.js';
 
 
+const geminiRequestTimestamps = [];
+let rpmCallback = null;
+
+export const setRpmCallback = (cb) => {
+  rpmCallback = cb;
+};
+
+export const getGeminiRpmInfo = () => {
+  const now = Date.now();
+  // Filter out timestamps older than 60 seconds
+  while (geminiRequestTimestamps.length > 0 && geminiRequestTimestamps[0] < now - 60000) {
+    geminiRequestTimestamps.shift();
+  }
+  
+  const count = geminiRequestTimestamps.length;
+  let timeLeft = 0;
+  if (count > 0) {
+    const oldest = geminiRequestTimestamps[0];
+    timeLeft = Math.max(0, Math.ceil((oldest + 60000 - now) / 1000));
+  }
+  
+  return {
+    count,
+    timeLeft,
+    limit: 15
+  };
+};
+
 export const logGeminiRequest = (modelName, action, payload) => {
+  // Record current request timestamp
+  geminiRequestTimestamps.push(Date.now());
+  
+  // Trigger callback for real-time socket updates
+  if (rpmCallback) {
+    try {
+      rpmCallback(getGeminiRpmInfo());
+    } catch (e) {
+      console.error('Error executing RPM callback:', e);
+    }
+  }
+
   try {
     const logDir = path.resolve('logs');
     if (!fs.existsSync(logDir)) {

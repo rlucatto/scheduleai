@@ -22,7 +22,7 @@ import {
   oauth2Client,
   saveTokens
 } from './services/calendar.js';
-import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, getLastKeyUsed, getLastKeyValueUsed, synthesizeSpeech } from './services/gemini.js';
+import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, getLastKeyUsed, getLastKeyValueUsed, synthesizeSpeech, getGeminiRpmInfo, setRpmCallback } from './services/gemini.js';
 import { 
   startScheduler, 
   stopScheduler, 
@@ -91,8 +91,13 @@ app.get('/api/auth/status', (req, res) => {
     lastModelUsed: getLastModelUsed(),
     lastKeyUsed: getLastKeyUsed(),
     lastKeyStringUsed: maskedKey,
-    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
+    googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+    rpmStatus: getGeminiRpmInfo()
   });
+});
+
+app.get('/api/rpm/status', (req, res) => {
+  res.json(getGeminiRpmInfo());
 });
 
 app.get('/api/auth/url', (req, res) => {
@@ -1203,6 +1208,11 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`Socket client disconnected: ${socket.id}`);
   });
+});
+
+// Register RPM updates callback to broadcast to all sockets in real time
+setRpmCallback((rpmInfo) => {
+  io.emit('rpm_update', rpmInfo);
 });
 
 // Start scheduler
