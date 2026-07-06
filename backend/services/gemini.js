@@ -12,42 +12,67 @@ import { getPreferences, setPreferences } from './scheduler.js';
 import { searchGoogleContacts, createGoogleContact, updateGoogleContact } from './contacts.js';
 
 
-const geminiRequestTimestamps = [];
+const modelRequestTimestamps = { gemini: [], groq: [], openrouter: [], local: [] };
 let rpmCallback = null;
 
 export const setRpmCallback = (cb) => {
   rpmCallback = cb;
 };
 
-export const getGeminiRpmInfo = () => {
+export const getModelProvider = (modelName) => {
+  if (!modelName) return 'gemini';
+  const name = modelName.toLowerCase();
+  if (name.startsWith('groq-')) return 'groq';
+  if (name.startsWith('openrouter-')) return 'openrouter';
+  if (name.includes('gemini-')) return 'gemini';
+  return 'local';
+};
+
+export const getProviderRpmInfo = (provider) => {
   const now = Date.now();
+  if (!modelRequestTimestamps[provider]) {
+    modelRequestTimestamps[provider] = [];
+  }
+  const timestamps = modelRequestTimestamps[provider];
+  
   // Filter out timestamps older than 60 seconds
-  while (geminiRequestTimestamps.length > 0 && geminiRequestTimestamps[0] < now - 60000) {
-    geminiRequestTimestamps.shift();
+  while (timestamps.length > 0 && timestamps[0] < now - 60000) {
+    timestamps.shift();
   }
   
-  const count = geminiRequestTimestamps.length;
+  let limit = 15;
+  if (provider === 'groq') limit = 30;
+  if (provider === 'openrouter') limit = 15;
+  if (provider === 'local') limit = 9999;
+  
+  const count = timestamps.length;
   let timeLeft = 0;
   if (count > 0) {
-    const oldest = geminiRequestTimestamps[0];
+    const oldest = timestamps[0];
     timeLeft = Math.max(0, Math.ceil((oldest + 60000 - now) / 1000));
   }
   
   return {
+    provider,
     count,
     timeLeft,
-    limit: 15
+    limit
   };
 };
 
 export const logGeminiRequest = (modelName, action, payload) => {
-  // Record current request timestamp
-  geminiRequestTimestamps.push(Date.now());
+  const provider = getModelProvider(modelName);
   
-  // Trigger callback for real-time socket updates
+  // Record current request timestamp in the model's provider bucket
+  if (!modelRequestTimestamps[provider]) {
+    modelRequestTimestamps[provider] = [];
+  }
+  modelRequestTimestamps[provider].push(Date.now());
+  
+  // Trigger callback for real-time socket updates (include provider name for context)
   if (rpmCallback) {
     try {
-      rpmCallback(getGeminiRpmInfo());
+      rpmCallback(getProviderRpmInfo(provider));
     } catch (e) {
       console.error('Error executing RPM callback:', e);
     }
@@ -299,6 +324,15 @@ const getSmartSortedModels = (models, message) => {
         score -= 50;
       }
     }
+
+    // Check RPM limits for proactive switching
+    const provider = getModelProvider(modelName);
+    const rpmInfo = getProviderRpmInfo(provider);
+    if (rpmInfo.count >= rpmInfo.limit) {
+      console.log(`[AI ROUTING] Model ${modelName} (${provider}) has reached its RPM limit (${rpmInfo.count}/${rpmInfo.limit}). Proactively switching to next available model.`);
+      score -= 100000; // Demote to the bottom of the list
+    }
+
     return score;
   };
 

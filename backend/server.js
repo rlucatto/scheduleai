@@ -22,7 +22,7 @@ import {
   oauth2Client,
   saveTokens
 } from './services/calendar.js';
-import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, getLastKeyUsed, getLastKeyValueUsed, synthesizeSpeech, getGeminiRpmInfo, setRpmCallback } from './services/gemini.js';
+import { chatWithAssistant, checkModelsHealth, checkSingleModelHealth, getLastModelUsed, getLastKeyUsed, getLastKeyValueUsed, synthesizeSpeech, getProviderRpmInfo, getModelProvider, setRpmCallback } from './services/gemini.js';
 import { 
   startScheduler, 
   stopScheduler, 
@@ -85,19 +85,23 @@ const PORT = process.env.PORT || 5000;
 app.get('/api/auth/status', (req, res) => {
   const lastKeyValue = getLastKeyValueUsed();
   const maskedKey = lastKeyValue ? `${lastKeyValue.substring(0, 8)}...${lastKeyValue.substring(lastKeyValue.length - 4)}` : '';
+  const lastModel = getLastModelUsed() || 'gemini-2.5-flash';
+  const provider = getModelProvider(lastModel);
   res.json({
     status: getAuthStatus(),
     preferences: getPreferences(),
-    lastModelUsed: getLastModelUsed(),
+    lastModelUsed: lastModel,
     lastKeyUsed: getLastKeyUsed(),
     lastKeyStringUsed: maskedKey,
     googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
-    rpmStatus: getGeminiRpmInfo()
+    rpmStatus: getProviderRpmInfo(provider)
   });
 });
 
 app.get('/api/rpm/status', (req, res) => {
-  res.json(getGeminiRpmInfo());
+  const model = req.query.model || getLastModelUsed() || 'gemini-2.5-flash';
+  const provider = getModelProvider(model);
+  res.json(getProviderRpmInfo(provider));
 });
 
 app.get('/api/auth/url', (req, res) => {

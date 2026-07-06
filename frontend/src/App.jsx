@@ -908,6 +908,7 @@ function App() {
   const [currentSpeakingText, setCurrentSpeakingText] = useState('');
 
   const chatEndRef = useRef(null);
+  const activeProviderRef = useRef('gemini');
 
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'dark';
@@ -2790,7 +2791,9 @@ function App() {
 
     socket.on('rpm_update', (data) => {
       console.log('RPM status update from socket:', data);
-      setRpmStatus(data);
+      if (data.provider === activeProviderRef.current) {
+        setRpmStatus(data);
+      }
     });
 
     return () => {
@@ -2815,9 +2818,19 @@ function App() {
     }
   }, [chatHistory, archivedHistory]);
 
+  const getModelProvider = (modelName) => {
+    if (!modelName) return 'gemini';
+    const name = modelName.toLowerCase();
+    if (name.startsWith('groq-')) return 'groq';
+    if (name.startsWith('openrouter-')) return 'openrouter';
+    if (name.includes('gemini-')) return 'gemini';
+    return 'local';
+  };
+
   const fetchRpmStatus = async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/api/rpm/status`);
+      const activeModelName = currentActiveModel || preferences.modelPriority?.[0] || 'gemini-2.5-flash';
+      const res = await fetch(`${BACKEND_URL}/api/rpm/status?model=${encodeURIComponent(activeModelName)}`);
       if (res.ok) {
         const data = await res.json();
         setRpmStatus(data);
@@ -2826,6 +2839,13 @@ function App() {
       console.warn('Failed to fetch RPM status:', err);
     }
   };
+
+  // Fetch RPM status automatically whenever the active model or preference order changes
+  useEffect(() => {
+    const activeModelName = currentActiveModel || preferences.modelPriority?.[0] || 'gemini-2.5-flash';
+    activeProviderRef.current = getModelProvider(activeModelName);
+    fetchRpmStatus();
+  }, [currentActiveModel, preferences.modelPriority]);
 
   // Timer to count down remaining seconds for Gemini RPM sliding window reset
   useEffect(() => {
