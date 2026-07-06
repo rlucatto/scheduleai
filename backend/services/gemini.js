@@ -239,32 +239,37 @@ const classifyRequest = (message = '') => {
 
 const getSmartSortedModels = (models, message) => {
   const classification = classifyRequest(message);
+  const prefs = getPreferences();
+  const userPriorityList = prefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
   
   const getModelScore = (modelName) => {
     let score = 0;
     
-    // Default base priority (original index)
-    const baseIndex = models.indexOf(modelName);
-    score -= baseIndex; // Lower index in user preference is better
-
-    // Parse user numbered priority prefix (e.g. "1-", "2-", etc.) for local models
-    const prefixMatch = modelName.match(/^(\d+)-/);
-    if (prefixMatch) {
-      const num = parseInt(prefixMatch[1], 10);
-      score += (20 - num) * 15; // "1-" gets +285, "2-" gets +270, etc. to strongly prioritize numbered models
-    } else if (!modelName.startsWith('gemini-')) {
-      score -= 100; // non-prefixed local models get pushed way down
+    // Check user preferred priority list (index in user preference)
+    const userPriorityIndex = userPriorityList.indexOf(modelName);
+    if (userPriorityIndex !== -1) {
+      // Prioritized by user. Give a large score based on rank (lower index = higher score)
+      score += (10 - userPriorityIndex) * 100;
+    } else {
+      // Auto-discovered/fallback model. Rank lower than user preferred models.
+      const prefixMatch = modelName.match(/^(\d+)-/);
+      if (prefixMatch) {
+        const num = parseInt(prefixMatch[1], 10);
+        score += (10 - num) * 5;
+      } else if (!modelName.startsWith('gemini-')) {
+        score -= 50;
+      }
     }
 
     if (classification.needsSearch) {
       // Prioritize Gemini models for search
       if (modelName.startsWith('gemini-')) {
-        score += 100;
+        score += 150;
         if (modelName.includes('2.5-flash') || modelName.includes('1.5-pro')) {
           score += 50; // best search models
         }
       } else {
-        score -= 200; // push Ollama down since it lacks search
+        score -= 300; // strongly push down since they lack search capability
       }
     }
     
