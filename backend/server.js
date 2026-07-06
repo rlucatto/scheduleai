@@ -475,14 +475,6 @@ app.get('/api/preferences', (req, res) => {
   res.json(getPreferences());
 });
 
-app.get('/api/debug-env', (req, res) => {
-  res.json({
-    hasGroq: !!process.env.GROQ_API_KEY,
-    hasOpenRouter: !!process.env.OPENROUTER_API_KEY,
-    keys: Object.keys(process.env).filter(k => k.includes('KEY') || k.includes('API') || k.includes('SECRET') || k.includes('ID'))
-  });
-});
-
 app.get('/api/models/local', async (req, res) => {
   const extraModels = [];
   if (process.env.GROQ_API_KEY) {
