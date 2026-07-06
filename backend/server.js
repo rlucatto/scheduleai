@@ -18,6 +18,7 @@ import {
   listEvents, 
   insertEvent, 
   deleteEvent,
+  updateEvent,
   oauth2Client,
   saveTokens
 } from './services/calendar.js';
@@ -555,7 +556,6 @@ app.delete('/api/calendar/events/:id', async (req, res) => {
 
 app.patch('/api/calendar/events/:id', async (req, res) => {
   try {
-    const { updateEvent } = await import('./services/calendar.js');
     const result = await updateEvent(req.params.id, req.body);
     res.json(result);
   } catch (error) {
