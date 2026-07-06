@@ -2311,7 +2311,6 @@ function App() {
         const authStatus = finalAuthStatus || await fetchStatus();
         
         fetchTimeline();
-        fetchModelHealth();
         fetchContacts(authStatus?.userEmail || '');
 
         if (authStatus && !authStatus.isConnected && authStatus.isConfigured) {

@@ -2098,7 +2098,7 @@ export const checkSingleModelHealth = async (model) => {
 
   const result = await _checkSingleModelHealthRaw(model);
   healthCache[cacheKey] = {
-    expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes cache
+    expiresAt: Date.now() + 30 * 60 * 1000, // 30 minutes cache
     data: result
   };
   return result;
