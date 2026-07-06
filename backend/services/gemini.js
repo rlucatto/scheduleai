@@ -315,7 +315,7 @@ async function callOpenAiCompatible(serviceName, endpointUrl, apiKey, modelName,
     }
   }
   const tzString = getTimezoneString(userTz);
-  const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+  const currentRefDate = getCurrentRefDateString(userTz, tzString);
   const toolDirective = `\n\nIMPORTANTE PARA CHAMADAS DE FERRAMENTA (TOOL CALLS): Se você precisar chamar qualquer ferramenta (como list_calendar_events, check_travel_time, etc.), use exclusivamente o mecanismo nativo de Function Calling (tool_calls). NUNCA escreva tags XML de função como '<function>' ou '</function>' ou qualquer texto que simule uma chamada de função na sua resposta de texto. A sua resposta deve conter apenas a chamada de ferramenta nativa.`;
   
   const systemPrompt = systemInstruction + currentRefDate + toolDirective + 
@@ -772,6 +772,20 @@ export const getTimezoneString = (timeZone = 'America/Sao_Paulo') => {
     console.error('Error formatting timezone string:', err.message);
   }
   return 'UTC-03:00';
+};
+
+export const getCurrentRefDateString = (userTz, tzString) => {
+  const offsetString = tzString.replace('UTC', '').trim(); // e.g. "-05:00" or "+01:00" or "-03:00"
+  const nowStr = new Date().toLocaleString('pt-BR', { timeZone: userTz });
+  return `\n\nIMPORTANTE DATA E HORA DE REFERÊNCIA:
+A data/hora atual de referência do sistema é exatamente: ${nowStr} (Fuso Horário ${tzString}, offset: ${offsetString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.
+
+IMPORTANTE FORMATO DE DATA/HORA NAS FERRAMENTAS (create_calendar_event, etc.):
+- Ao chamar as ferramentas que recebem datas/horas (startTime, endTime), você DEVE obrigatoriamente especificar a string no formato ISO com o offset do fuso horário local correto do usuário (offset: ${offsetString}) em vez de usar 'Z' (UTC).
+- Exemplo: se o fuso do usuário tem offset ${offsetString} (como Chicago ou São Paulo) e o usuário pede para agendar um compromisso às 20:00 (8 pm), envie o parâmetro como "YYYY-MM-DDT20:00:00${offsetString}" (ex: "2026-07-06T20:00:00${offsetString}").
+- NUNCA termine as datas com 'Z' a menos que você queira agendar no horário de Londres/UTC (que fará com que o compromisso apareça no horário errado para o usuário após a conversão de fuso). Insira sempre o offset local "${offsetString}" no final da string ISO.
+
+IMPORTANTE FUSO HORÁRIO: Quando você obtiver horários de eventos ou jogos da internet em outro fuso horário (como Horário de Brasília), converta-os silenciosamente para o fuso horário local do usuário (${tzString}) e informe a ele APENAS o horário local convertido. NUNCA mencione o horário da outra região na resposta final e NUNCA explique a conta da conversão matemática de fuso. Vá direto ao ponto informando o horário do compromisso no fuso dele (${tzString}).`;
 };
 
 export const enrichEventsWithLocalTime = async (events) => {
@@ -1522,7 +1536,7 @@ const callOllama = async (modelName, message, history, searchResultsContext) => 
     }
   }
   const tzString = getTimezoneString(userTz);
-  const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
+  const currentRefDate = getCurrentRefDateString(userTz, tzString);
   const systemPrompt = systemInstruction + currentRefDate + 
     `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
     (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '');
@@ -1885,8 +1899,7 @@ Responda APENAS com o JSON válido, sem wraps do tipo \`\`\`json ou qualquer tex
           }
         }
         const tzString = getTimezoneString(userTz);
-        const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.
-IMPORTANTE FUSO HORÁRIO: Quando você obtiver horários de eventos ou jogos da internet em outro fuso horário (como Horário de Brasília), converta-os silenciosamente para o fuso horário local do usuário (${tzString}) e informe a ele APENAS o horário local convertido. NUNCA mencione o horário da outra região na resposta final e NUNCA explique a conta da conversão matemática de fuso. Vá direto ao ponto informando o horário do compromisso no fuso dele (${tzString}).`;
+        const currentRefDate = getCurrentRefDateString(userTz, tzString);
         
         const agentName = prefs.agentName || 'ScheduleAI';
         const dynamicInstruction = systemInstruction.replace(/ScheduleAI/g, agentName) + currentRefDate + 
