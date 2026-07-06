@@ -479,6 +479,7 @@ app.get('/api/models/local', async (req, res) => {
   const extraModels = [];
   if (process.env.GROQ_API_KEY) {
     extraModels.push('groq-llama-3.3-70b');
+    extraModels.push('groq-llama-3.1-8b');
   }
   if (process.env.OPENROUTER_API_KEY) {
     extraModels.push('openrouter-llama-3.3-70b');

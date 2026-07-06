@@ -316,7 +316,9 @@ async function callOpenAiCompatible(serviceName, endpointUrl, apiKey, modelName,
   }
   const tzString = getTimezoneString(userTz);
   const currentRefDate = `\n\nIMPORTANTE: A data/hora atual de referência do sistema é exatamente: ${new Date().toLocaleString('pt-BR', { timeZone: userTz })} (Fuso Horário ${tzString}). Qualquer menção a termos relativos ("hoje", "amanhã", "depois de amanhã", "esta sexta", etc.) deve ser agendada estritamente em relação a esta data de referência. Os compromissos existentes retornados pelas ferramentas podem estar em ISO/UTC. Certifique-se de convertê-los para o mesmo fuso horário (${tzString}) para fazer comparações de proximidade e conflitos. NÃO use as datas históricas obtidas nas buscas da internet se o usuário pediu especificamente para hoje ou uma data relativa.`;
-  const systemPrompt = systemInstruction + currentRefDate + 
+  const toolDirective = `\n\nIMPORTANTE PARA CHAMADAS DE FERRAMENTA (TOOL CALLS): Se você precisar chamar qualquer ferramenta (como list_calendar_events, check_travel_time, etc.), use exclusivamente o mecanismo nativo de Function Calling (tool_calls). NUNCA escreva tags XML de função como '<function>' ou '</function>' ou qualquer texto que simule uma chamada de função na sua resposta de texto. A sua resposta deve conter apenas a chamada de ferramenta nativa.`;
+  
+  const systemPrompt = systemInstruction + currentRefDate + toolDirective + 
     `\n\nPreferências Atuais do Usuário:\n` + JSON.stringify(prefs, null, 2) +
     (searchResultsContext ? `\n\nContexto de Busca na Internet (Fatos reais): ${searchResultsContext}` : '');
 
@@ -561,8 +563,9 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
   let models = [...(prefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'])];
   
   // Auto-append Groq and OpenRouter models as fallbacks if keys are configured
-  if (process.env.GROQ_API_KEY && !models.includes('groq-llama-3.3-70b')) {
-    models.push('groq-llama-3.3-70b');
+  if (process.env.GROQ_API_KEY) {
+    if (!models.includes('groq-llama-3.3-70b')) models.push('groq-llama-3.3-70b');
+    if (!models.includes('groq-llama-3.1-8b')) models.push('groq-llama-3.1-8b');
   }
   if (process.env.OPENROUTER_API_KEY && !models.includes('openrouter-llama-3.3-70b')) {
     models.push('openrouter-llama-3.3-70b');
@@ -599,6 +602,32 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
         return { ...result, modelUsed: modelName };
       } catch (error) {
         console.warn(`[GROQ ROUTING] Groq model failed:`, error.message);
+        if (error.response && error.response.data) {
+          console.warn(`[GROQ ROUTING] Groq Error Details:`, JSON.stringify(error.response.data, null, 2));
+        }
+        continue;
+      }
+    }
+
+    if (modelName === 'groq-llama-3.1-8b') {
+      try {
+        console.log(`[GROQ ROUTING] Trying Groq model Llama 3.1 8B`);
+        const result = await callOpenAiCompatible(
+          'groq',
+          'https://api.groq.com/openai/v1/chat/completions',
+          process.env.GROQ_API_KEY,
+          'llama-3.1-8b-instant',
+          message,
+          history,
+          searchResultsContext
+        );
+        lastModelUsed = modelName;
+        return { ...result, modelUsed: modelName };
+      } catch (error) {
+        console.warn(`[GROQ ROUTING] Groq Llama 3.1 8B failed:`, error.message);
+        if (error.response && error.response.data) {
+          console.warn(`[GROQ ROUTING] Groq Llama 3.1 8B Error Details:`, JSON.stringify(error.response.data, null, 2));
+        }
         continue;
       }
     }
@@ -619,6 +648,9 @@ export const executeWithFallback = async (geminiApiCallFn, ollamaApiCallFn, mess
         return { ...result, modelUsed: modelName };
       } catch (error) {
         console.warn(`[OPENROUTER ROUTING] OpenRouter model failed:`, error.message);
+        if (error.response && error.response.data) {
+          console.warn(`[OPENROUTER ROUTING] OpenRouter Error Details:`, JSON.stringify(error.response.data, null, 2));
+        }
         continue;
       }
     }
@@ -2137,6 +2169,30 @@ const _checkSingleModelHealthRaw = async (model) => {
       }
     } catch (err) {
       return { status: 'inactive', message: `Erro Groq: ${err.message}` };
+    }
+  } else if (model === 'groq-llama-3.1-8b') {
+    if (!process.env.GROQ_API_KEY) {
+      return { status: 'inactive', message: 'Chave Groq não configurada no .env' };
+    }
+    try {
+      const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: 'responder apenas OK' }],
+        max_tokens: 2
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+        },
+        timeout: 10000
+      });
+      if (response.data && response.data.choices && response.data.choices[0]) {
+        return { status: 'active', message: 'Funcional - Respondendo via Groq Llama 3.1 8B.' };
+      } else {
+        return { status: 'inactive', message: 'Respondendo via Groq Llama 3.1 8B, mas sem escolhas retornadas.' };
+      }
+    } catch (err) {
+      return { status: 'inactive', message: `Erro Groq Llama 3.1 8B: ${err.message}` };
     }
   } else if (model === 'openrouter-llama-3.3-70b') {
     if (!process.env.OPENROUTER_API_KEY) {
