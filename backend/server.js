@@ -1123,6 +1123,10 @@ app.get('/api/app/version', (req, res) => {
 });
 
 app.get('/api/app/download', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  
   const baseDir = process.cwd().endsWith('backend') ? process.cwd() : path.join(process.cwd(), 'backend');
   const apkPath = path.join(baseDir, 'public', 'update.apk');
   if (fs.existsSync(apkPath)) {
