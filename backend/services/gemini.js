@@ -238,7 +238,6 @@ const classifyRequest = (message = '') => {
 };
 
 const getSmartSortedModels = (models, message) => {
-  const classification = classifyRequest(message);
   const prefs = getPreferences();
   const userPriorityList = prefs.modelPriority || ['gemini-2.5-flash', 'gemini-2.0-flash'];
   
@@ -249,7 +248,7 @@ const getSmartSortedModels = (models, message) => {
     const userPriorityIndex = userPriorityList.indexOf(modelName);
     if (userPriorityIndex !== -1) {
       // Prioritized by user. Give a large score based on rank (lower index = higher score)
-      score += (10 - userPriorityIndex) * 100;
+      score += (100 - userPriorityIndex) * 100;
     } else {
       // Auto-discovered/fallback model. Rank lower than user preferred models.
       const prefixMatch = modelName.match(/^(\d+)-/);
@@ -260,55 +259,11 @@ const getSmartSortedModels = (models, message) => {
         score -= 50;
       }
     }
-
-    if (classification.needsSearch) {
-      // Prioritize Gemini models for search
-      if (modelName.startsWith('gemini-')) {
-        score += 150;
-        if (modelName.includes('2.5-flash') || modelName.includes('1.5-pro')) {
-          score += 50; // best search models
-        }
-      } else {
-        score -= 300; // strongly push down since they lack search capability
-      }
-    }
-    
-    if (classification.needsHeavyReasoning) {
-      // Prioritize reasoning models (pro, LOGICA, or flash as fallback)
-      if (modelName.includes('pro') || modelName.includes('LOGICA')) {
-        score += 80;
-      } else if (modelName.includes('2.5-flash')) {
-        score += 30;
-      }
-    }
-    
-    if (classification.needsCode) {
-      // Prioritize coding models
-      if (modelName.includes('coder') || modelName.includes('PROGRAMACAO') || modelName.includes('pro')) {
-        score += 80;
-      }
-    }
-
-    if (classification.needsCreativity) {
-      // Prioritize creative models
-      if (modelName.includes('CRIATIVO') || modelName.includes('creative') || modelName.includes('pro')) {
-        score += 80;
-      }
-    }
-
-    // Default fast/simple action fallback
-    if (!classification.needsSearch && !classification.needsHeavyReasoning && !classification.needsCode && !classification.needsCreativity) {
-      // Prioritize fast models (RAPIDO, MUITORAPIDO, flash)
-      if (modelName.includes('RAPIDO') || modelName.includes('flash') || modelName.includes('MUITORAPIDO')) {
-        score += 30;
-      }
-    }
-
     return score;
   };
 
   const sorted = [...models].sort((a, b) => getModelScore(b) - getModelScore(a));
-  console.log(`[SMART ROUTING] Prompt: "${message}". Classification:`, classification, `-> Sorted Priority:`, sorted);
+  console.log(`[AI ROUTING] Prompt: "${message}". Sorted Priority (Strict User Preference):`, sorted);
   return sorted;
 };
 
