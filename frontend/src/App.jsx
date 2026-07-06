@@ -2732,6 +2732,12 @@ function App() {
       return new Date(isoString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     }
   };
+  const formatDurationHhMm = (seconds) => {
+    if (!seconds) return '00:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+  };
   const formatDate = (isoString) => {
     try {
       const tz = preferences.userTimezone || undefined;
@@ -3890,79 +3896,102 @@ function App() {
                       return (
                         <React.Fragment key={event.eventId}>
                           {/* Se arrumar (prep) */}
-                          {prepWidth > 0 && (
-                            <div 
-                              style={{
-                                position: 'absolute',
-                                top: '8px',
-                                height: '32px',
-                                left: `${getPctCropped(event.getReady)}%`,
-                                width: `${prepWidth}%`,
-                                backgroundColor: 'hsl(280, 65%, 60%)',
-                                borderRadius: '4px 0 0 4px',
-                                opacity: 0.85,
-                                zIndex: 2,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#ffffff',
-                                fontSize: '9px',
-                                fontWeight: '700',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-                                overflow: 'hidden'
-                              }}
-                              title={`Se arrumar: ${formatTime(event.getReady)} - ${formatTime(event.departure)}`}
-                            >
-                              <span style={{
-                                width: '100%',
-                                textAlign: 'center',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                padding: '0 4px',
-                                display: 'block'
-                              }}>
-                                Se arrumar
-                              </span>
-                            </div>
-                          )}
+                          {prepWidth > 0 && (() => {
+                             const minsLeft = Math.ceil((event.departure.getTime() - now.getTime()) / (60 * 1000));
+                             const showCountdown = minsLeft > 0 && minsLeft <= 60;
+                             return (
+                               <div 
+                                 style={{
+                                   position: 'absolute',
+                                   top: '8px',
+                                   height: '32px',
+                                   left: `${getPctCropped(event.getReady)}%`,
+                                   width: `${prepWidth}%`,
+                                   backgroundColor: 'hsl(280, 65%, 60%)',
+                                   borderRadius: '4px 0 0 4px',
+                                   opacity: 0.85,
+                                   zIndex: 2,
+                                   display: 'flex',
+                                   flexDirection: 'column',
+                                   justifyContent: 'flex-end',
+                                   alignItems: 'center',
+                                   paddingBottom: '3px',
+                                   color: '#ffffff',
+                                   fontSize: '9px',
+                                   fontWeight: '700',
+                                   textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                   overflow: 'hidden',
+                                   lineHeight: '1.0'
+                                 }}
+                                 title={`Se arrumar: ${formatTime(event.getReady)} - ${formatTime(event.departure)}`}
+                               >
+                                 {showCountdown && (
+                                   <span style={{ fontSize: '8px', opacity: 0.9, fontWeight: 'bold', marginBottom: '1px' }}>
+                                     {minsLeft} min
+                                   </span>
+                                 )}
+                                 <span style={{
+                                   width: '100%',
+                                   textAlign: 'center',
+                                   whiteSpace: 'nowrap',
+                                   overflow: 'hidden',
+                                   textOverflow: 'ellipsis',
+                                   padding: '0 4px',
+                                   display: 'block'
+                                 }}>
+                                   SE ARRUMAR
+                                 </span>
+                               </div>
+                             );
+                           })()}
 
                           {/* Deslocamento */}
-                          {transitWidth > 0 && (
-                            <div 
-                              style={{
-                                position: 'absolute',
-                                top: '8px',
-                                height: '32px',
-                                left: `${getPctCropped(event.departure)}%`,
-                                width: `${transitWidth}%`,
-                                backgroundColor: 'hsl(38, 90%, 55%)',
-                                opacity: 0.9,
-                                zIndex: 2,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#ffffff',
-                                fontSize: '9px',
-                                fontWeight: '700',
-                                textShadow: '0 1px 2px rgba(0,0,0,0.6)',
-                                overflow: 'hidden'
-                              }}
-                              title={`Deslocamento: ${formatTime(event.departure)} - ${formatTime(event.evStart)} (${event.travelData?.durationText || ''})`}
-                            >
-                              <span style={{
-                                width: '100%',
-                                textAlign: 'center',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                padding: '0 4px',
-                                display: 'block'
-                              }}>
-                                Deslocamento
-                              </span>
-                            </div>
-                          )}
+                          {transitWidth > 0 && (() => {
+                             const minsLeft = Math.ceil((event.departure.getTime() - now.getTime()) / (60 * 1000));
+                             const showCountdown = minsLeft > 0 && minsLeft <= 60;
+                             return (
+                               <div 
+                                 style={{
+                                   position: 'absolute',
+                                   top: '8px',
+                                   height: '32px',
+                                   left: `${getPctCropped(event.departure)}%`,
+                                   width: `${transitWidth}%`,
+                                   backgroundColor: 'hsl(38, 90%, 55%)',
+                                   opacity: 0.9,
+                                   zIndex: 2,
+                                   display: 'flex',
+                                   flexDirection: 'column',
+                                   justifyContent: 'flex-end',
+                                   alignItems: 'center',
+                                   paddingBottom: '3px',
+                                   color: '#ffffff',
+                                   fontSize: '9px',
+                                   fontWeight: '700',
+                                   textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                                   overflow: 'hidden',
+                                   lineHeight: '1.0'
+                                 }}
+                                 title={`Deslocamento: ${formatTime(event.departure)} - ${formatTime(event.evStart)} (${event.travelData?.durationText || ''})`}
+                               >
+                                 <span style={{ fontSize: '8px', opacity: 0.9, fontWeight: 'bold', marginBottom: '1px' }}>
+                                   {formatDurationHhMm(event.travelData?.durationSeconds)}
+                                   {showCountdown && ` (${minsLeft} min)`}
+                                 </span>
+                                 <span style={{
+                                   width: '100%',
+                                   textAlign: 'center',
+                                   whiteSpace: 'nowrap',
+                                   overflow: 'hidden',
+                                   textOverflow: 'ellipsis',
+                                   padding: '0 4px',
+                                   display: 'block'
+                                 }}>
+                                   Deslocamento
+                                 </span>
+                               </div>
+                             );
+                           })()}
 
                           {/* Appointment */}
                           {apptWidth > 0 && (
